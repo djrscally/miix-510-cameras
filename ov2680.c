@@ -10,7 +10,7 @@
 #include "ov2680.h"
 
 static int ov2680_read_reg(struct i2c_client *client,
-			   u16 data_length, u16 reg, u16 *val)
+			    u16 data_length, u16 reg, u16 *val)
 {
 	int err;
 	struct i2c_msg msg[2];
@@ -31,7 +31,7 @@ static int ov2680_read_reg(struct i2c_client *client,
 
 	memset(msg, 0 , sizeof(msg));
 
-    printk(KERN_CRIT "ov2680: reading from addr 0x%02x, reg 0x%04x", client->addr, reg);
+     printk(KERN_CRIT "ov2680: reading from addr 0x%02x, reg 0x%04x", client->addr, reg);
 
 	msg[0].addr = client->addr;
 	msg[0].flags = 0;
@@ -118,7 +118,7 @@ static int ov2680_write_reg(struct i2c_client *client, u16 data_length,
 }
 
 static int ov2680_write_reg_array(struct i2c_client *client,
-			      const struct ov2680_reg *regs)
+			        const struct ov2680_reg *regs)
 {
 	u32 i;
 	int ret = 0;
@@ -129,7 +129,7 @@ static int ov2680_write_reg_array(struct i2c_client *client,
 	return ret;
 }
 
-static int ov2680_check_sensor_id(struct i2c_client *client)
+static int ov2680_check_ov2680_id(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	u16 high, low;
@@ -143,17 +143,17 @@ static int ov2680_check_sensor_id(struct i2c_client *client)
 	ret = ov2680_read_reg(client, OV2680_8BIT,
 					OV2680_ID_REG_HIGH, &high);
 	if (ret) {
-		dev_err(&client->dev, "sensor_id_high = 0x%x\n", high);
+		dev_err(&client->dev, "ov2680_id_high = 0x%x\n", high);
 		return -ENODEV;
 	}
 	ret = ov2680_read_reg(client, OV2680_8BIT,
 					OV2680_ID_REG_LOW, &low);
 	id = ((((u16) high) << 8) | (u16) low);
 
-    printk(KERN_CRIT "ov2680: Chip ID Fetched = 0x%04x", id);
+     printk(KERN_CRIT "ov2680: Chip ID Fetched = 0x%04x", id);
 
 	if (id != OV2680_ID) {
-		dev_err(&client->dev, "sensor ID error 0x%x\n", id);
+		dev_err(&client->dev, "ov2680 ID error 0x%x\n", id);
 		return -ENODEV;
 	}
 
@@ -161,7 +161,9 @@ static int ov2680_check_sensor_id(struct i2c_client *client)
 					OV2680_SC_CMMN_SUB_ID, &high);
 	revision = (u8) high & 0x0f;
 
-	dev_dbg(&client->dev, "sensor_revision = 0x%x\n", revision);
+	printk(KERN_CRIT, "ov2680: ov2680 revision=0x%x\n", revision);
+	printk(KERN_CRIT "detect ov2680 success\n");
+	dev_dbg(&client->dev, "ov2680_revision = 0x%x\n", revision);
 	dev_dbg(&client->dev, "detect ov2680 success\n");
 
 	return 0;
@@ -169,137 +171,138 @@ static int ov2680_check_sensor_id(struct i2c_client *client)
 
 static int match_depend(struct device *dev, const void *data)
 {
-    return (dev && dev->fwnode == data) ? 1 : 0;
+     return (dev && dev->fwnode == data) ? 1 : 0;
 }
 
 static int ov2680_probe(struct i2c_client *client)
 {
-    struct ov2680_device *sensor;
+	struct ov2680_device 		*ov2680;
+	struct acpi_device    		*int3472_acpi_device;
+	struct device          		*int3472_device;
 
-    sensor = kzalloc(sizeof(*sensor), GFP_KERNEL);
-    if (!sensor) {
-        dev_err(&client->dev, "out of memory\n");
-        return -ENOMEM;
+     ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
+     if (!ov2680) {
+          dev_err(&client->dev, "out of memory\n");
+          return -ENOMEM;
+     }
+
+     /* Tie i2c_client to ov2680_device, and vice versa */
+     ov2680->client = client;
+     i2c_set_clientdata(client, ov2680);
+
+     /*
+      * The driver will match the OV2680 device, but the GPIO
+      * pins lie in its dependent INT3472, so we need to walk
+      * up the dependencies to find that device.
+     */
+
+
+    /* get ACPI handle of OV2680 device */
+    struct acpi_handle *dev_handle = ACPI_HANDLE(&client->dev);
+
+    /* Get dependent devices */
+    struct acpi_handle_list dep_devices;
+    acpi_evaluate_reference(dev_handle, "_DEP", NULL, &dep_devices);
+
+    int i;
+    for (i=0;i<dep_devices.count;i++) {
+         struct acpi_device_info *devinfo;
+         acpi_get_object_info(dep_devices.handles[i], &devinfo);
+
+         if (devinfo->valid & ACPI_VALID_HID && !strcmp(devinfo->hardware_id.string, "INT3472")) {
+                acpi_bus_get_device(dep_devices.handles[i], &int3472_acpi_device);
+                int3472_device = bus_find_device(&platform_bus_type, NULL, &int3472_acpi_device->fwnode, match_depend);
+				int3472_acpi_device->dev = *int3472_device;
+         }
     }
 
-    /* Tie i2c_client to ov2680_device, and vice versa */
-    sensor->client = client;
-    i2c_set_clientdata(client, sensor);
+	int ret;
 
-    /*
-     * The driver will match the OV2680 device, but the GPIO
-     * pins lie in its dependent INT3472, so we need to walk
-     * up the dependencies to find that device.
-    */
-   struct acpi_device   *int3472_device;
-   struct device        *dev;
+    /* configure and enable regulators */
+    for (i = 0; i < OV2680_NUM_SUPPLIES; i++) {
+	    ov2680->supplies[i].supply = ov2680_supply_names[i];
+    }
 
-   /* get ACPI handle of OV2680 device */
-   struct acpi_handle *dev_handle = ACPI_HANDLE(&client->dev);
+    devm_regulator_bulk_get(&client->dev, OV2680_NUM_SUPPLIES, ov2680->supplies);
 
-   /* Get dependent devices */
-   struct acpi_handle_list dep_devices;
-   acpi_evaluate_reference(dev_handle, "_DEP", NULL, &dep_devices);
+    /* ret = acpi_dev_add_driver_gpios(int3472_acpi_device, int3472_acpi_gpios); */
 
-   int i;
-   for (i=0;i<dep_devices.count;i++) {
-       struct acpi_device_info *devinfo;
-       acpi_get_object_info(dep_devices.handles[i], &devinfo);
+    ov2680->xshutdn = gpiod_get_index(&int3472_acpi_device->dev, NULL, 0, GPIOD_ASIS);
+    ov2680->pwdnb = gpiod_get_index(&int3472_acpi_device->dev, NULL, 1, GPIOD_ASIS);
+    ov2680->led = gpiod_get_index(&int3472_acpi_device->dev, NULL, 2, GPIOD_ASIS);
+    
+    /* POWER ON BABY YEAH */
 
-       if (devinfo->valid & ACPI_VALID_HID && !strcmp(devinfo->hardware_id.string, "INT3472")) {
-            acpi_bus_get_device(dep_devices.handles[i], &int3472_device);
-            dev = bus_find_device(&platform_bus_type, NULL, &int3472_device->fwnode, match_depend);
-            int3472_device->dev = *dev;
-       }
-   }
+    gpiod_set_value_cansleep(ov2680->xshutdn, 0);
+    gpiod_set_value_cansleep(ov2680->pwdnb, 0);
+    gpiod_set_value_cansleep(ov2680->led, 0);
 
-   int ret;
-
-   /* configure and enable regulators */
-   for (i = 0; i < OV2680_NUM_SUPPLIES; i++) {
-	   sensor->supplies[i].supply = ov2680_supply_names[i];
-   }
-
-   devm_regulator_bulk_get(&client->dev, OV2680_NUM_SUPPLIES, sensor->supplies);
-
-   /* ret = acpi_dev_add_driver_gpios(int3472_device, int3472_acpi_gpios); */
-
-   sensor->xshutdn = gpiod_get_index(&int3472_device->dev, NULL, 0, GPIOD_ASIS);
-   sensor->pwdnb = gpiod_get_index(&int3472_device->dev, NULL, 1, GPIOD_ASIS);
-   sensor->led = gpiod_get_index(&int3472_device->dev, NULL, 2, GPIOD_ASIS);
-   
-   /* POWER ON BABY YEAH */
-
-   gpiod_set_value_cansleep(sensor->xshutdn, 0);
-   gpiod_set_value_cansleep(sensor->pwdnb, 0);
-   gpiod_set_value_cansleep(sensor->led, 0);
-
-	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, sensor->supplies);
+	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 	if (ret) {
 		printk(KERN_CRIT "ov2680: failed to enable regulators\n");
 		return ret;
 	}
 
-   gpiod_set_value_cansleep(sensor->xshutdn, 0);
-   usleep_range(10000, 11000);
+    gpiod_set_value_cansleep(ov2680->xshutdn, 0);
+    usleep_range(10000, 11000);
 
 
-   gpiod_set_value_cansleep(sensor->xshutdn, 1);
-   gpiod_set_value_cansleep(sensor->pwdnb, 1);
-   gpiod_set_value_cansleep(sensor->led, 1);
+    gpiod_set_value_cansleep(ov2680->xshutdn, 1);
+    gpiod_set_value_cansleep(ov2680->pwdnb, 1);
+    gpiod_set_value_cansleep(ov2680->led, 1);
 
-   usleep_range(10000, 11000);
+    usleep_range(10000, 11000);
 
-   ov2680_check_sensor_id(client);
-
-   return 0;
-}
-
-static int ov2680_remove(struct i2c_client *client)
-{
-    /*
-     * Code goes here to get acpi_device, turn off all
-     * the GPIO pins, remove them from the ACPI device
-     * and whatnot
-     */
-
-    struct ov2680_device *sensor;
-
-    sensor = i2c_get_clientdata(client);
-
-    gpiod_set_value_cansleep(sensor->xshutdn, 0);
-    gpiod_set_value_cansleep(sensor->pwdnb, 0);
-    gpiod_set_value_cansleep(sensor->led, 0);
-
-    gpiod_put(sensor->xshutdn);
-    gpiod_put(sensor->pwdnb);
-    gpiod_put(sensor->led);
-
-	regulator_bulk_disable(OV2680_NUM_SUPPLIES, sensor->supplies);
-
-   kzfree(sensor);
+    ov2680_check_ov2680_id(client);
 
     return 0;
 }
 
+static int ov2680_remove(struct i2c_client *client)
+{
+     /*
+      * Code goes here to get acpi_device, turn off all
+      * the GPIO pins, remove them from the ACPI device
+      * and whatnot
+      */
+
+     struct ov2680_device *ov2680;
+
+     ov2680 = i2c_get_clientdata(client);
+
+     gpiod_set_value_cansleep(ov2680->xshutdn, 0);
+     gpiod_set_value_cansleep(ov2680->pwdnb, 0);
+     gpiod_set_value_cansleep(ov2680->led, 0);
+
+     gpiod_put(ov2680->xshutdn);
+     gpiod_put(ov2680->pwdnb);
+     gpiod_put(ov2680->led);
+
+	regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
+
+     kzfree(ov2680);
+
+     return 0;
+}
+
 static const struct acpi_device_id ov2680_acpi_match[] = {
-    {"OVTI2680", 0},
-    { },
+     {"OVTI2680", 0},
+     { },
 };
 
 MODULE_DEVICE_TABLE(acpi, ov2680_acpi_match);
 
 static struct i2c_driver ov2680_driver = {
-    .driver = {
-        .name = "ov2680",
-        .acpi_match_table = ov2680_acpi_match,
-    },
-    .probe_new = ov2680_probe,
-    .remove = ov2680_remove,
+     .driver = {
+          .name = "ov2680",
+          .acpi_match_table = ov2680_acpi_match,
+     },
+     .probe_new = ov2680_probe,
+     .remove = ov2680_remove,
 };
 
 module_i2c_driver(ov2680_driver);
 
 MODULE_AUTHOR("Dan Scally <djrscally@protonmail.com>");
-MODULE_DESCRIPTION("A driver for OmniVision 2680 sensors");
+MODULE_DESCRIPTION("A driver for OmniVision 2680 Camera");
 MODULE_LICENSE("GPL");
