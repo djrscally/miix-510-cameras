@@ -29,9 +29,9 @@ struct ov2680_reg {
 struct ov2680_device {
     struct i2c_client       *client;
 
-    struct gpio_desc        *gpio1;
-    struct gpio_desc        *gpio2;
-    struct gpio_desc        *gpio3;
+    struct gpio_desc        *xshutdn;
+    struct gpio_desc        *pwdnb;
+    struct gpio_desc        *led;
 
 	struct regulator_bulk_data supplies[3];
 };

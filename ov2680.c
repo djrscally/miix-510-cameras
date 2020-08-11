@@ -224,22 +224,31 @@ static int ov2680_probe(struct i2c_client *client)
 
    /* ret = acpi_dev_add_driver_gpios(int3472_device, int3472_acpi_gpios); */
 
-   sensor->gpio1 = gpiod_get_index(&int3472_device->dev, NULL, 0, GPIOD_ASIS);
-   sensor->gpio2 = gpiod_get_index(&int3472_device->dev, NULL, 1, GPIOD_ASIS);
-   sensor->gpio3 = gpiod_get_index(&int3472_device->dev, NULL, 2, GPIOD_ASIS);
+   sensor->xshutdn = gpiod_get_index(&int3472_device->dev, NULL, 0, GPIOD_ASIS);
+   sensor->pwdnb = gpiod_get_index(&int3472_device->dev, NULL, 1, GPIOD_ASIS);
+   sensor->led = gpiod_get_index(&int3472_device->dev, NULL, 2, GPIOD_ASIS);
    
    /* POWER ON BABY YEAH */
 
-   gpiod_set_value_cansleep(sensor->gpio1, 0);
-   gpiod_set_value_cansleep(sensor->gpio2, 0);
-   gpiod_set_value_cansleep(sensor->gpio3, 0);
+   gpiod_set_value_cansleep(sensor->xshutdn, 0);
+   gpiod_set_value_cansleep(sensor->pwdnb, 0);
+   gpiod_set_value_cansleep(sensor->led, 0);
 
-   gpiod_set_value(sensor->gpio1, 0);
+	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, sensor->supplies);
+	if (ret) {
+		printk(KERN_CRIT "ov2680: failed to enable regulators\n");
+		return ret;
+	}
+
+   gpiod_set_value_cansleep(sensor->xshutdn, 0);
    usleep_range(10000, 11000);
 
-   gpiod_set_value_cansleep(sensor->gpio1, 1);
-   gpiod_set_value_cansleep(sensor->gpio2, 1);
-   gpiod_set_value_cansleep(sensor->gpio3, 1);
+
+   gpiod_set_value_cansleep(sensor->xshutdn, 1);
+   gpiod_set_value_cansleep(sensor->pwdnb, 1);
+   gpiod_set_value_cansleep(sensor->led, 1);
+
+   usleep_range(10000, 11000);
 
    ov2680_check_sensor_id(client);
 
@@ -258,13 +267,15 @@ static int ov2680_remove(struct i2c_client *client)
 
     sensor = i2c_get_clientdata(client);
 
-    gpiod_set_value_cansleep(sensor->gpio1, 0);
-    gpiod_set_value_cansleep(sensor->gpio2, 0);
-    gpiod_set_value_cansleep(sensor->gpio3, 0);
+    gpiod_set_value_cansleep(sensor->xshutdn, 0);
+    gpiod_set_value_cansleep(sensor->pwdnb, 0);
+    gpiod_set_value_cansleep(sensor->led, 0);
 
-    gpiod_put(sensor->gpio1);
-    gpiod_put(sensor->gpio2);
-    gpiod_put(sensor->gpio3);
+    gpiod_put(sensor->xshutdn);
+    gpiod_put(sensor->pwdnb);
+    gpiod_put(sensor->led);
+
+	regulator_bulk_disable(OV2680_NUM_SUPPLIES, sensor->supplies);
 
    kzfree(sensor);
 
