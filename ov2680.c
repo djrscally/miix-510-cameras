@@ -16,6 +16,15 @@ static const struct acpi_gpio_mapping int3472_acpi_gpios[] = {
     {},
 };
 
+struct ov2680_device {
+    struct i2c_client           *client;
+
+    /* GPIO pins */
+    struct gpio_desc            *gpio1;
+    struct gpio_desc            *gpio2;
+    struct gpio_desc            *gpio3;
+};
+
 static int match_depend(struct device *dev, const void *data)
 {
     return (dev && dev->fwnode == data) ? 1 : 0;
@@ -23,7 +32,18 @@ static int match_depend(struct device *dev, const void *data)
 
 static int ov2680_probe(struct i2c_client *client)
 {
-    
+    struct ov2680_device *sensor;
+
+    sensor = kzalloc(sizeof(*sensor), GFP_KERNEL);
+    if (!sensor) {
+        dev_err(&client->dev, "out of memory\n");
+        return -ENOMEM;
+    }
+
+    /* Tie i2c_client to ov2680_device, and vice versa */
+    sensor->client = client;
+    i2c_set_clientdata(client, sensor);
+
     /*
      * The driver will match the OV2680 device, but the GPIO
      * pins lie in its dependent INT3472, so we need to walk
@@ -55,15 +75,13 @@ static int ov2680_probe(struct i2c_client *client)
 
    /* ret = acpi_dev_add_driver_gpios(int3472_device, int3472_acpi_gpios); */
 
-   struct gpio_desc *gpiod1, *gpiod2, *gpiod3;
-
-   gpiod1 = gpiod_get_index(&int3472_device->dev, NULL, 0, GPIOD_ASIS);
-   gpiod2 = gpiod_get_index(&int3472_device->dev, NULL, 1, GPIOD_ASIS);
-   gpiod3 = gpiod_get_index(&int3472_device->dev, NULL, 2, GPIOD_ASIS);
+   sensor->gpio1 = gpiod_get_index(&int3472_device->dev, NULL, 0, GPIOD_ASIS);
+   sensor->gpio2 = gpiod_get_index(&int3472_device->dev, NULL, 1, GPIOD_ASIS);
+   sensor->gpio3 = gpiod_get_index(&int3472_device->dev, NULL, 2, GPIOD_ASIS);
    
-   gpiod_set_value_cansleep(gpiod1, 1);
-   gpiod_set_value_cansleep(gpiod2, 1);
-   gpiod_set_value_cansleep(gpiod3, 1);
+   gpiod_set_value_cansleep(sensor->gpio1, 1);
+   gpiod_set_value_cansleep(sensor->gpio2, 1);
+   gpiod_set_value_cansleep(sensor->gpio3, 1);
 
    return 0;
 }
@@ -75,6 +93,20 @@ static int ov2680_remove(struct i2c_client *client)
      * the GPIO pins, remove them from the ACPI device
      * and whatnot
      */
+
+    struct ov2680_device *sensor;
+
+    sensor = i2c_get_clientdata(client);
+
+   gpiod_set_value_cansleep(sensor->gpio1, 0);
+   gpiod_set_value_cansleep(sensor->gpio2, 0);
+   gpiod_set_value_cansleep(sensor->gpio3, 0);
+
+   gpiod_put(sensor->gpio1);
+   gpiod_put(sensor->gpio2);
+   gpiod_put(sensor->gpio3);
+
+   kzfree(sensor);
 
     return 0;
 }
@@ -88,7 +120,7 @@ MODULE_DEVICE_TABLE(acpi, ov2680_acpi_match);
 
 static struct i2c_driver ov2680_driver = {
     .driver = {
-        .name = "ov2680-3",
+        .name = "ov2680",
         .acpi_match_table = ov2680_acpi_match,
     },
     .probe_new = ov2680_probe,
