@@ -3,6 +3,13 @@
 #define I2C_MSG_LENGTH              0x02
 #define OV2680_ID                   0x2680
 #define OV2680_SC_CMMN_SUB_ID	    0x302A
+#define OV2680_NUM_SUPPLIES			3
+
+static const char * const ov2680_supply_names[] = {
+	"dovdd",		/* Digital I/O Power */
+	"avdd",			/* Analog Power */
+	"dvdd",			/* Digital Core Power */
+};
 
 enum ov2680_tok_type {
 	OV2680_8BIT  = 0x0001,
@@ -20,9 +27,11 @@ struct ov2680_reg {
 };
 
 struct ov2680_device {
-    struct i2c_client       *i2c_client;
+    struct i2c_client       *client;
 
     struct gpio_desc        *gpio1;
     struct gpio_desc        *gpio2;
     struct gpio_desc        *gpio3;
+
+	struct regulator_bulk_data supplies[3];
 };
