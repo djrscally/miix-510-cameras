@@ -35,3 +35,8 @@ struct ov2680_device {
 
 	struct regulator_bulk_data supplies[3];
 };
+
+static const struct mfd_cell tps68470s[] = {
+	{ .name = "tps68470-gpio"},
+	{ .name = "tps68470_pmic_opregion" },
+};

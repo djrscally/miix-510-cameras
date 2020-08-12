@@ -2,8 +2,10 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/clk.h>
 #include <linux/acpi.h>
 #include <linux/regulator/consumer.h>
+#include <linux/mfd/core.h>
 #include <linux/gpio/consumer.h>
 #include <linux/platform_device.h>
 
@@ -177,8 +179,9 @@ static int match_depend(struct device *dev, const void *data)
 static int ov2680_probe(struct i2c_client *client)
 {
 	struct ov2680_device 		*ov2680;
-	struct acpi_device    		*int3472_acpi_device;
 	struct device          		*int3472_device;
+	struct acpi_device			*int3472_acpi_device;
+	int 						ret;
 
      ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
      if (!ov2680) {
@@ -190,46 +193,40 @@ static int ov2680_probe(struct i2c_client *client)
      ov2680->client = client;
      i2c_set_clientdata(client, ov2680);
 
-     /*
-      * The driver will match the OV2680 device, but the GPIO
-      * pins lie in its dependent INT3472, so we need to walk
-      * up the dependencies to find that device.
-     */
+	int3472_acpi_device = acpi_dev_get_first_match_dev("INT3472", "1", -1);
 
+	if (int3472_acpi_device == NULL) {
+		printk(KERN_CRIT "ov2680: error fetching INT3472 acpi_device.\n");
+		return -EINVAL;
+	}
 
-    /* get ACPI handle of OV2680 device */
-    struct acpi_handle *dev_handle = ACPI_HANDLE(&client->dev);
+	/* int3472_device = bus_find_device(&platform_bus_type, NULL, &int3472_acpi_device->fwnode, match_depend); */
+	int3472_device = bus_find_device_by_acpi_dev(&platform_bus_type, int3472_acpi_device);
 
-    /* Get dependent devices */
-    struct acpi_handle_list dep_devices;
-    acpi_evaluate_reference(dev_handle, "_DEP", NULL, &dep_devices);
+	if (int3472_device == NULL) {
+		printk(KERN_CRIT "ov2680: error fetching INT3472 device.\n");
+		return -EINVAL;
+	}
 
-    int i;
-    for (i=0;i<dep_devices.count;i++) {
-         struct acpi_device_info *devinfo;
-         acpi_get_object_info(dep_devices.handles[i], &devinfo);
-
-         if (devinfo->valid & ACPI_VALID_HID && !strcmp(devinfo->hardware_id.string, "INT3472")) {
-                acpi_bus_get_device(dep_devices.handles[i], &int3472_acpi_device);
-                int3472_device = bus_find_device(&platform_bus_type, NULL, &int3472_acpi_device->fwnode, match_depend);
-				int3472_acpi_device->dev = *int3472_device;
-         }
-    }
-
-	int ret;
+	int3472_acpi_device->dev = *int3472_device;
 
     /* configure and enable regulators */
+	int i;
     for (i = 0; i < OV2680_NUM_SUPPLIES; i++) {
 	    ov2680->supplies[i].supply = ov2680_supply_names[i];
     }
 
     devm_regulator_bulk_get(&client->dev, OV2680_NUM_SUPPLIES, ov2680->supplies);
 
-    /* ret = acpi_dev_add_driver_gpios(int3472_acpi_device, int3472_acpi_gpios); */
+    ov2680->xshutdn = gpiod_get_index(int3472_device, NULL, 0, GPIOD_ASIS);
 
-    ov2680->xshutdn = gpiod_get_index(&int3472_acpi_device->dev, NULL, 0, GPIOD_ASIS);
-    ov2680->pwdnb = gpiod_get_index(&int3472_acpi_device->dev, NULL, 1, GPIOD_ASIS);
-    ov2680->led = gpiod_get_index(&int3472_acpi_device->dev, NULL, 2, GPIOD_ASIS);
+	if (IS_ERR(ov2680->xshutdn)) {
+		printk(KERN_CRIT "ov2680: An error occurred fetching XSHUTDN.\n");
+	}
+    ov2680->pwdnb = gpiod_get_index(int3472_device, NULL, 1, GPIOD_ASIS);
+    ov2680->led = gpiod_get_index(int3472_device, NULL, 2, GPIOD_ASIS);
+
+
     
     /* POWER ON BABY YEAH */
 
@@ -243,11 +240,9 @@ static int ov2680_probe(struct i2c_client *client)
 		return ret;
 	}
 
-    gpiod_set_value_cansleep(ov2680->xshutdn, 0);
     usleep_range(10000, 11000);
 
-
-    gpiod_set_value_cansleep(ov2680->xshutdn, 1);
+ /*   gpiod_set_value_cansleep(ov2680->xshutdn, 1); */
     gpiod_set_value_cansleep(ov2680->pwdnb, 1);
     gpiod_set_value_cansleep(ov2680->led, 1);
 
@@ -270,6 +265,12 @@ static int ov2680_remove(struct i2c_client *client)
 
      ov2680 = i2c_get_clientdata(client);
 
+	 if (ov2680 == NULL) {
+		 printk(KERN_CRIT "ov2680: .remove function couldn't fetch clientdata.\n");
+		 return -100;
+	 }
+
+
      gpiod_set_value_cansleep(ov2680->xshutdn, 0);
      gpiod_set_value_cansleep(ov2680->pwdnb, 0);
      gpiod_set_value_cansleep(ov2680->led, 0);
@@ -279,8 +280,6 @@ static int ov2680_remove(struct i2c_client *client)
      gpiod_put(ov2680->led);
 
 	regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
-
-     kzfree(ov2680);
 
      return 0;
 }
