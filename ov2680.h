@@ -27,7 +27,8 @@ struct ov2680_reg {
 };
 
 struct ov2680_device {
-    struct i2c_client       *client;
+    struct i2c_client       *client;			/* client for this physical device */
+	struct device			*pmic_dev;			/* physical device for the sensor's PMIC */
 
     struct gpio_desc        *xshutdn;
     struct gpio_desc        *pwdnb;

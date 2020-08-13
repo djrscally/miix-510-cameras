@@ -248,6 +248,15 @@ static int ov2680_probe(struct i2c_client *client)
 
     usleep_range(10000, 11000);
 
+	 /* try to load the int3472 driver */
+	 ret = devm_mfd_add_devices(&client->dev, PLATFORM_DEVID_NONE, tps68470s, 2, NULL, 0, NULL);
+
+	 if (ret < 0) {
+		 dev_err(&client->dev, "devm_mfd_add_devices failed: %d\n", ret);
+		 return ret;
+	 }
+
+
     ov2680_check_ov2680_id(client);
 
     return 0;
