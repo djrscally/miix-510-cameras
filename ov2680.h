@@ -29,15 +29,12 @@ struct ov2680_reg {
 struct ov2680_device {
     struct i2c_client       *client;			/* client for this physical device */
 	struct device			*pmic_dev;			/* physical device for the sensor's PMIC */
+	struct v4l2_subdev		sd;
 
-    struct gpio_desc        *xshutdn;
-    struct gpio_desc        *pwdnb;
-    struct gpio_desc        *led;
+	/* GPIO pins to turn on the PMIC */
+    struct gpio_desc        *gpio0;
+    struct gpio_desc        *gpio1;
 
 	struct regulator_bulk_data supplies[3];
-};
-
-static const struct mfd_cell tps68470s[] = {
-	{ .name = "tps68470-gpio"},
-	{ .name = "tps68470_pmic_opregion" },
+	short					is_enabled;
 };
