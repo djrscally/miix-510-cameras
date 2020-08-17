@@ -8,9 +8,22 @@
 #include <linux/mfd/core.h>
 #include <linux/gpio/consumer.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
+#include <linux/gpio/machine.h>
 #include <linux/regmap.h>
 
+#include <media/v4l2-common.h>
+#include <media/v4l2-ctrls.h>
+#include <media/v4l2-subdev.h>
+#include <media/v4l2-device.h>
+
 #include "ov2680.h"
+
+static struct ov2680_device *to_ov2680_dev(struct v4l2_subdev *sd)
+{
+	return container_of(sd, struct ov2680_device, sd);
+}
+
 
 static int ov2680_read_reg(struct i2c_client *client,
 			    u16 data_length, u16 reg, u16 *val)
@@ -246,6 +259,59 @@ static int ov2680_configure_pmic_gpios(struct ov2680_device *ov2680)
 
 }
 
+static int ov2680_configure_sensor_gpios(struct ov2680_device *ov2680)
+/*
+ * Get the GPIO pins that are **supplied** by the PMIC and **consumed**
+ * by the camera module, rather than the ones from the gpiochip0 that
+ * are **consumed** by the INT3472. These are the pins that supply our
+ * voltage and reset pin
+ */
+{
+
+	static struct gpiod_lookup_table ov2680_gpios = {
+		.dev_id = "i2c-OVTI2680:00",
+		.table = {
+			GPIO_LOOKUP_IDX("tps68470-gpio", 7, "s_enable", 0, GPIO_ACTIVE_HIGH),
+			GPIO_LOOKUP_IDX("tps68470-gpio", 8, "s_idle", 0, GPIO_ACTIVE_HIGH),
+			GPIO_LOOKUP_IDX("tps68470-gpio", 9, "s_resetn", 0, GPIO_ACTIVE_HIGH),
+			{ },
+		},
+	};
+
+	gpiod_add_lookup_table(&ov2680_gpios);
+
+	ov2680->s_enable = gpiod_get_index(&ov2680->client->dev, "s_enable", 0, GPIOD_OUT_HIGH);
+
+	if (ov2680->s_enable == NULL) {
+		printk(KERN_CRIT "Error fetching GP1.\n");
+	} else {
+		printk(KERN_CRIT "s_enable\n");
+		gpiod_set_value_cansleep(ov2680->s_enable, 1);
+	}
+
+	ov2680->s_idle = gpiod_get_index(&ov2680->client->dev, "s_idle", 0, GPIOD_OUT_HIGH);
+
+	if (ov2680->s_idle == NULL) {
+		printk(KERN_CRIT "Error fetching GP2.\n");
+	} else {
+		printk(KERN_CRIT "s_idle\n");
+		gpiod_set_value_cansleep(ov2680->s_idle, 1);
+	}
+
+	ov2680->s_resetn = gpiod_get_index(&ov2680->client->dev, "s_resetn", 0, GPIOD_OUT_HIGH);
+
+	if (ov2680->s_resetn == NULL) {
+		printk(KERN_CRIT "Error fetching GP2.\n");
+	} else {
+		printk(KERN_CRIT "s_idle\n");
+		gpiod_set_value_cansleep(ov2680->s_resetn, 1);
+	}
+
+	printk(KERN_CRIT "func complete.\n");
+
+	return 0;
+}
+
 static int ov2680_configure_regulators(struct ov2680_device *ov2680)
 /*
  * Just get the power regulators.
@@ -311,8 +377,16 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		return 0;
 	}
 
+	/*
 	gpiod_set_value_cansleep(ov2680->gpio0, 0);
 	gpiod_set_value_cansleep(ov2680->gpio1, 0);
+	*/
+
+	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
+	usleep_range(10000, 11000);
+
+	gpiod_set_value_cansleep(ov2680->s_enable, 0);
+	gpiod_set_value_cansleep(ov2680->s_idle, 0);
 
 	ret = regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 
@@ -324,6 +398,76 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 	return 0;
 }
 
+static int ov2680_s_power(struct v4l2_subdev *sd, int on)
+{
+	int ret;
+	struct ov2680_device *ov2680;
+
+	ov2680 = to_ov2680_dev(sd);
+
+	if (on) {
+		ret = ov2680_power_on(ov2680);
+
+		if (ret) {
+			ov2680_power_off(ov2680);
+			dev_err(&ov2680->client->dev, "Error powering on ov2680; disabling.\n");
+			return 1;
+		}
+
+		return 0;
+	} else {
+		ret = ov2680_power_off(ov2680);
+		return 0;
+	}
+}
+
+static int ov2680_s_stream(struct v4l2_subdev *sd, int enable)
+{
+	struct ov2680_device *ov2680 = to_ov2680_dev(sd);
+	int ret;
+
+	if (ov2680->is_streaming == enable) {
+		dev_dbg(&ov2680->client->dev, "Attempt to set stream=%d, but it is already in that state.\n", enable);
+		return 0;
+	}
+
+	ret = ov2680_write_reg(ov2680->client, OV2680_8BIT, OV2680_REG_STREAM_CTRL, enable);
+	ov2680->is_streaming = enable;
+
+	if (ret) {
+		dev_err(&ov2680->client->dev, "An error occurred setting stream enabled=%d.\n", enable);
+	}
+
+	return ret;
+}
+
+static int ov2680_register(struct v4l2_subdev *sd)
+{
+	printk(KERN_CRIT "Registered subdev %s\n", sd->name);
+	return 0;
+}
+
+static const struct v4l2_subdev_internal_ops ov2680_internal_ops = {
+	.registered		= ov2680_register,
+};
+
+static const struct v4l2_subdev_core_ops ov2680_core_ops = {
+	.s_power		= ov2680_s_power,
+};
+
+static const struct v4l2_subdev_video_ops ov2680_video_ops = {
+	.s_stream		= ov2680_s_stream,
+};
+
+static const struct v4l2_subdev_ops ov2680_subdev_ops = {
+	.core 			= &ov2680_core_ops,
+	.video			= &ov2680_video_ops,
+};
+
+static const struct media_entity_operations ov2680_subdev_entity_ops = {
+	.link_validate	= v4l2_subdev_link_validate,
+};
+
 static int ov2680_remove(struct i2c_client *client)
 {
 	/*
@@ -332,9 +476,11 @@ static int ov2680_remove(struct i2c_client *client)
 	* and whatnot
 	*/
 
+	struct v4l2_subdev *sd;
 	struct ov2680_device *ov2680;
 
-	ov2680 = i2c_get_clientdata(client);
+	sd = i2c_get_clientdata(client);
+	ov2680 = to_ov2680_dev(sd);
 
 	if (ov2680 == NULL) {
 		printk(KERN_CRIT "ov2680: .remove function couldn't fetch clientdata.\n");
@@ -346,6 +492,8 @@ static int ov2680_remove(struct i2c_client *client)
 	gpiod_put(ov2680->gpio0);
 	gpiod_put(ov2680->gpio1);
 
+	v4l2_device_unregister_subdev(sd);
+
 	return 0;
 }
 
@@ -353,8 +501,9 @@ static int ov2680_probe(struct i2c_client *client)
 {
 	struct ov2680_device 		*ov2680;
 	struct device          		*int3472_device;
-	struct acpi_device			*int3472_acpi_device;
 	int 						ret;
+
+	printk(KERN_CRIT "Device name is %s.\n", dev_name(&client->dev));
 
 	ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
 	if (!ov2680) {
@@ -367,7 +516,6 @@ static int ov2680_probe(struct i2c_client *client)
 
 	/* First, tie i2c_client to ov2680_device, and vice versa */
 	ov2680->client = client;
-	i2c_set_clientdata(client, ov2680);
 
 	/* Next, grab the device entry for the camera's PMIC so we can talk to it */
 
@@ -415,6 +563,54 @@ static int ov2680_probe(struct i2c_client *client)
 		dev_dbg(&client->dev, "The sensor could not be initialised.\n");
 		goto remove_out;
 	}
+
+	/* v4l2 infrastructure initialisation */
+	v4l2_i2c_subdev_init(&ov2680->sd, ov2680->client, &ov2680_subdev_ops);
+
+	/* don't really know wtf this bit does */
+	ov2680->sd.internal_ops = &ov2680_internal_ops;
+	ov2680->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+	ov2680->pad.flags = MEDIA_PAD_FL_SOURCE;
+	ov2680->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
+	ov2680->sd.entity.ops = &ov2680_subdev_entity_ops;
+
+	pm_runtime_set_active(&client->dev);
+	pm_runtime_enable(&client->dev);
+	pm_runtime_idle(&client->dev);
+
+	ret = media_entity_pads_init(&ov2680->sd.entity, 1, &ov2680->pad);
+
+	if (ret) {
+		printk(KERN_CRIT "media entity initialisation failed.\n");
+		goto remove_out;
+	}
+
+	printk(KERN_CRIT "media entity initialised as %s.\n", ov2680->sd.entity.name);
+
+	printk(KERN_CRIT "v4l2 subdev registered as %s.\n", ov2680->sd.name);
+
+	ret = v4l2_async_register_subdev_sensor_common(&ov2680->sd);
+
+	if (ov2680->sd.v4l2_dev != NULL) {
+		printk(KERN_CRIT "registered against the device %s.\n", ov2680->sd.v4l2_dev->name);
+	} else {
+		printk(KERN_CRIT "Yeah it's null mate.\n");
+	}
+
+	if (ret < 0) {
+		dev_err(&ov2680->client->dev, "An error occurred registering the subdev.\n");
+		printk(KERN_CRIT "oops.\n");
+		goto remove_out;
+	}
+	printk(KERN_CRIT "past.\n");
+	int ngpio;
+
+	ov2680_configure_sensor_gpios(ov2680);
+
+	ngpio = gpiod_count(&client->dev, NULL);
+
+	printk(KERN_CRIT "num GPIOs: %d\n", ngpio);
+
     return 0;
 
 remove_out:
