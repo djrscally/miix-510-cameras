@@ -185,130 +185,45 @@ static int ov2680_check_ov2680_id(struct i2c_client *client)
 	return 0;
 }
 
-static int ov2680_get_pmic_dev(struct ov2680_device *ov2680)
-/*
- * The camera sensor is off by default, and needs to be activated
- * by triggering the GPIO inputs to a TPS68470 power management IC
- * that sits in front of it. We need to fetch the device struct 
- * for that device by parsing ACPI
- */
-{
-	struct acpi_device			*int3472_acpi_device;			/* _HID of the PMIC is INT3472 */
-	struct device				*int3472_device;
-
-	/*
-	 * In ACPI tables the correct device has _HID INT3472, _UID One. This is
-	 * how we can identify it uniquely.
-	*/
-	int3472_acpi_device = acpi_dev_get_first_match_dev("INT3472", "1", -1);
-	
-	if (!int3472_acpi_device) {
-		dev_dbg(&ov2680->client->dev, "An error occurred fetching the PMIC's ACPI device.\n");
-		return -1;
-	}
-
-	/*
-	 * Now that we have the ACPI dev, we can use that to match to the physical device.
-	*/
-
-	int3472_device = bus_find_device_by_acpi_dev(&platform_bus_type, int3472_acpi_device);
-
-	if (!int3472_device) {
-		dev_dbg(&ov2680->client->dev, "An error occurred fetching the PMIC's physical device.\n");
-		return -2;
-	}
-
-	/*
-	 * Store the value for use later configuring things.
-	*/
-
-	ov2680->pmic_dev = int3472_device;
-
-	return 0;
-}
-
-static int ov2680_configure_pmic_gpios(struct ov2680_device *ov2680)
-/*
- * The PMIC consumes 3 GPIO pins. Heaven only knows what the first does,
- * but the latter two turn on both the PMIC and the camera sensor, so
- * we need to be able to use them.
-*/
-{
-
-	/* Get the GPIO pins */
-    ov2680->gpio0 = gpiod_get_index(ov2680->pmic_dev, NULL, 1, GPIOD_ASIS);
-
-	if (ov2680->gpio0 == NULL) {
-		dev_dbg(&ov2680->client->dev, "Unable to fetch GPIO0. Device cannot be powered on.\n");
-		return -10;
-	}
-
-    ov2680->gpio1 = gpiod_get_index(ov2680->pmic_dev, NULL, 2, GPIOD_ASIS);
-
-	if (ov2680->gpio0 == NULL) {
-		dev_dbg(&ov2680->client->dev, "Unable to fetch GPIO1. Device cannot be powered on.\n");
-		return -20;
-	}
-
-    /* Pull both pins low initially. No errors...because the func doesn't return anything! */
-
-    gpiod_set_value_cansleep(ov2680->gpio0, 0);
-    gpiod_set_value_cansleep(ov2680->gpio1, 0);
-
-	return 0;
-
-}
-
-static int ov2680_configure_sensor_gpios(struct ov2680_device *ov2680)
+static int ov2680_configure_gpios(struct ov2680_device *ov2680)
 /*
  * Get the GPIO pins that are **supplied** by the PMIC and **consumed**
  * by the camera module, rather than the ones from the gpiochip0 that
  * are **consumed** by the INT3472. These are the pins that supply our
- * voltage and reset pin
+ * voltage and reset pin. I actually have no idea which pin is wired to
+ * which pad on the sensor, but I'm assuming enable and idle are the 
+ * voltage rails and resetn is the XSHUTDN pin, because I'd wire it 
+ * that way if I was wiring it.
  */
 {
-
-	static struct gpiod_lookup_table ov2680_gpios = {
-		.dev_id = "i2c-OVTI2680:00",
-		.table = {
-			GPIO_LOOKUP_IDX("tps68470-gpio", 7, "s_enable", 0, GPIO_ACTIVE_HIGH),
-			GPIO_LOOKUP_IDX("tps68470-gpio", 8, "s_idle", 0, GPIO_ACTIVE_HIGH),
-			GPIO_LOOKUP_IDX("tps68470-gpio", 9, "s_resetn", 0, GPIO_ACTIVE_HIGH),
-			{ },
-		},
-	};
-
-	gpiod_add_lookup_table(&ov2680_gpios);
+	gpiod_add_lookup_table(ov2680->gpios);
 
 	ov2680->s_enable = gpiod_get_index(&ov2680->client->dev, "s_enable", 0, GPIOD_OUT_HIGH);
 
 	if (ov2680->s_enable == NULL) {
-		printk(KERN_CRIT "Error fetching GP1.\n");
-	} else {
-		printk(KERN_CRIT "s_enable\n");
-		gpiod_set_value_cansleep(ov2680->s_enable, 1);
-	}
+		dev_err(&ov2680->client->dev, "Error fetching s_enable.\n");
+		return -1;
+	} 
 
 	ov2680->s_idle = gpiod_get_index(&ov2680->client->dev, "s_idle", 0, GPIOD_OUT_HIGH);
 
 	if (ov2680->s_idle == NULL) {
-		printk(KERN_CRIT "Error fetching GP2.\n");
-	} else {
-		printk(KERN_CRIT "s_idle\n");
-		gpiod_set_value_cansleep(ov2680->s_idle, 1);
-	}
+		dev_err(&ov2680->client->dev, "Error fetching s_idle.\n");
+		return -1;
+	} 
 
 	ov2680->s_resetn = gpiod_get_index(&ov2680->client->dev, "s_resetn", 0, GPIOD_OUT_HIGH);
 
 	if (ov2680->s_resetn == NULL) {
-		printk(KERN_CRIT "Error fetching GP2.\n");
-	} else {
-		printk(KERN_CRIT "s_idle\n");
-		gpiod_set_value_cansleep(ov2680->s_resetn, 1);
-	}
+		dev_err(&ov2680->client->dev, "Error fetching s_resetn.\n");
+		return -1;
+	} 
 
-	printk(KERN_CRIT "func complete.\n");
-
+	/* set em all low initially */
+	gpiod_set_value_cansleep(ov2680->s_enable, 0);
+	gpiod_set_value_cansleep(ov2680->s_idle, 0);
+	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
+	
 	return 0;
 }
 
@@ -351,10 +266,12 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 		return ret;
 	}
 
+    gpiod_set_value_cansleep(ov2680->s_enable, 1);
+    gpiod_set_value_cansleep(ov2680->s_idle, 1);
+
     usleep_range(10000, 11000);
 
-    gpiod_set_value_cansleep(ov2680->gpio0, 1);
-    gpiod_set_value_cansleep(ov2680->gpio1, 1);
+	gpiod_set_value_cansleep(ov2680->s_resetn, 1);
 
 	/*
 	 * The ov2680 datasheet specifies a short pause between turning the chip on and the
@@ -377,11 +294,6 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		return 0;
 	}
 
-	/*
-	gpiod_set_value_cansleep(ov2680->gpio0, 0);
-	gpiod_set_value_cansleep(ov2680->gpio1, 0);
-	*/
-
 	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
 	usleep_range(10000, 11000);
 
@@ -394,6 +306,8 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		dev_dbg(&ov2680->client->dev, "Error disabling the regulators.\n");
 		return 1;
 	}
+
+	ov2680->is_enabled = 0;
 
 	return 0;
 }
@@ -489,8 +403,11 @@ static int ov2680_remove(struct i2c_client *client)
 
 	ov2680_power_off(ov2680);
 
-	gpiod_put(ov2680->gpio0);
-	gpiod_put(ov2680->gpio1);
+	gpiod_put(ov2680->s_enable);
+	gpiod_put(ov2680->s_idle);
+	gpiod_put(ov2680->s_resetn);
+
+	gpiod_remove_lookup_table(ov2680->gpios);
 
 	v4l2_device_unregister_subdev(sd);
 
@@ -500,8 +417,8 @@ static int ov2680_remove(struct i2c_client *client)
 static int ov2680_probe(struct i2c_client *client)
 {
 	struct ov2680_device 		*ov2680;
-	struct device          		*int3472_device;
 	int 						ret;
+	struct clk     				*xvclk;
 
 	printk(KERN_CRIT "Device name is %s.\n", dev_name(&client->dev));
 
@@ -519,18 +436,13 @@ static int ov2680_probe(struct i2c_client *client)
 
 	/* Next, grab the device entry for the camera's PMIC so we can talk to it */
 
-	ret = ov2680_get_pmic_dev(ov2680);
+	ov2680->gpios = &ov2680_gpios;
+
+	/* Configure the GPIO pins */
+	ret = ov2680_configure_gpios(ov2680);
 
 	if (ret < 0) {
-		dev_dbg(&client->dev, "Unable to configure PMIC. Device initialisation failed.\n");
-		goto remove_out;
-	}
-
-	/* Configure the PMICs GPIO pins */
-	ret = ov2680_configure_pmic_gpios(ov2680);
-
-	if (ret < 0) {
-		dev_dbg(&client->dev, "Unable to configure PMIC GPIO pins. Device initialisation failed.\n");
+		dev_dbg(&client->dev, "Unable to configure GPIO pins. Device initialisation failed.\n");
 		goto remove_out;
 	}
 
@@ -548,8 +460,6 @@ static int ov2680_probe(struct i2c_client *client)
 		dev_dbg(&client->dev, "Could not power on the ov2680 due to a regulator fault.\n");
 		goto remove_out;
 	}
-
-	struct clk *xvclk;
 
 	xvclk = devm_clk_get(ov2680->pmic_dev, "xvclk");
 
@@ -573,10 +483,6 @@ static int ov2680_probe(struct i2c_client *client)
 	ov2680->pad.flags = MEDIA_PAD_FL_SOURCE;
 	ov2680->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 	ov2680->sd.entity.ops = &ov2680_subdev_entity_ops;
-
-	pm_runtime_set_active(&client->dev);
-	pm_runtime_enable(&client->dev);
-	pm_runtime_idle(&client->dev);
 
 	ret = media_entity_pads_init(&ov2680->sd.entity, 1, &ov2680->pad);
 
@@ -602,14 +508,6 @@ static int ov2680_probe(struct i2c_client *client)
 		printk(KERN_CRIT "oops.\n");
 		goto remove_out;
 	}
-	printk(KERN_CRIT "past.\n");
-	int ngpio;
-
-	ov2680_configure_sensor_gpios(ov2680);
-
-	ngpio = gpiod_count(&client->dev, NULL);
-
-	printk(KERN_CRIT "num GPIOs: %d\n", ngpio);
 
     return 0;
 

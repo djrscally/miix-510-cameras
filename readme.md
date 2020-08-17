@@ -62,4 +62,4 @@ Continue? [y/N] y
 0x26 0x80
 ```
 
-That command basically says "write two bytes (being 0x30 and 0x0a) to bus 7 addr 0x10, then read two bytes". The two bytes we write are the address of the register we're interested in, and we learn that the value stored there is 0x26 and 0x80, I.E. 2680! We detected the chip, hooray.
+That command basically says "write two bytes (being 0x30 and 0x0a) to bus 7 addr 0x10, then read two bytes". The two bytes we write are the address of the register we're interested in, and we learn that the value stored there is 0x26 and 0x80, I.E. 2680! We detected the chip, hooray. Putting that into the drivers is a bit more difficult. It doesn't really make sense to turn the GPIO pins for the PMIC on in this driver; that ought really to go into that modules driver.

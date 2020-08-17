@@ -67,6 +67,18 @@ struct ov2680_ctrls {
 	struct v4l2_ctrl *test_pattern;
 };
 
+/* GPIO Mapping for the camera */
+static struct gpiod_lookup_table ov2680_gpios = {
+	.dev_id = "i2c-OVTI2680:00",
+	.table = {
+		GPIO_LOOKUP_IDX("tps68470-gpio", 7, "s_enable", 0, GPIO_ACTIVE_HIGH),
+		GPIO_LOOKUP_IDX("tps68470-gpio", 8, "s_idle", 0, GPIO_ACTIVE_HIGH),
+		GPIO_LOOKUP_IDX("tps68470-gpio", 9, "s_resetn", 0, GPIO_ACTIVE_HIGH),
+		{ },
+	},
+};
+
+
 struct ov2680_device {
 	/* references */
     struct i2c_client       	*client;			/* client for this physical device */
@@ -78,6 +90,7 @@ struct ov2680_device {
     struct gpio_desc        	*gpio1;
 
 	/* GPIO pins to turn on the sensor */
+	struct gpiod_lookup_table	*gpios;
 	struct gpio_desc			*s_enable;
 	struct gpio_desc			*s_idle;
 	struct gpio_desc			*s_resetn;
