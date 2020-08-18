@@ -262,7 +262,7 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 
 	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 	if (ret) {
-		printk(KERN_CRIT "ov2680: failed to enable regulators\n");
+		dev_err(&ov2680->client->dev, "Failed to enable regulators\n");
 		return ret;
 	}
 
@@ -384,12 +384,6 @@ static const struct media_entity_operations ov2680_subdev_entity_ops = {
 
 static int ov2680_remove(struct i2c_client *client)
 {
-	/*
-	* Code goes here to get acpi_device, turn off all
-	* the GPIO pins, remove them from the ACPI device
-	* and whatnot
-	*/
-
 	struct v4l2_subdev *sd;
 	struct ov2680_device *ov2680;
 
@@ -420,8 +414,6 @@ static int ov2680_probe(struct i2c_client *client)
 	int 						ret;
 	struct clk     				*xvclk;
 
-	printk(KERN_CRIT "Device name is %s.\n", dev_name(&client->dev));
-
 	ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
 	if (!ov2680) {
 		dev_err(&client->dev, "out of memory\n");
@@ -434,7 +426,7 @@ static int ov2680_probe(struct i2c_client *client)
 	/* First, tie i2c_client to ov2680_device, and vice versa */
 	ov2680->client = client;
 
-	/* Next, grab the device entry for the camera's PMIC so we can talk to it */
+	/* Next, set the GPIO lookup table so we can find the control pins from the PMIC */
 
 	ov2680->gpios = &ov2680_gpios;
 
@@ -461,7 +453,7 @@ static int ov2680_probe(struct i2c_client *client)
 		goto remove_out;
 	}
 
-	xvclk = devm_clk_get(ov2680->pmic_dev, "xvclk");
+	xvclk = devm_clk_get(&ov2680->client->dev, "xvclk");
 
 	if (IS_ERR(xvclk)) {
 		dev_err(&client->dev, "xvclk clock missing or invalid.\n");
