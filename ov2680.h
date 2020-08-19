@@ -3,7 +3,7 @@
 #define I2C_MSG_LENGTH              0x02
 #define OV2680_ID                   0x2680
 #define OV2680_SC_CMMN_SUB_ID	    0x302A
-#define OV2680_NUM_SUPPLIES			3
+#define OV2680_NUM_SUPPLIES			10
 
 #define OV2680_REG_STREAM_CTRL		0x0100
 #define OV2680_REG_SOFT_RESET		0x0103
@@ -34,6 +34,13 @@ static const char * const ov2680_supply_names[] = {
 	"dovdd",		/* Digital I/O Power */
 	"avdd",			/* Analog Power */
 	"dvdd",			/* Digital Core Power */
+	"CORE",
+	"ANA",
+	"VCM",
+	"VIO",
+	"VSIO",
+	"AUX1",
+	"AUX2",
 };
 
 enum ov2680_tok_type {

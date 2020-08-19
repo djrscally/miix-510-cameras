@@ -2,6 +2,7 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/mfd/tps68470.h>
+#include <linux/mod_devicetable.h>
 
 /* header maybe */
 
@@ -15,13 +16,11 @@ enum tps68470_regulators {
     TPS68470_AUX2,
 };
 
-#define TPS68470_REGULATOR(_name, _id, _of_match, _ops, _n, _vr,	\
+#define TPS68470_REGULATOR(_name, _id, _ops, _n, _vr,	\
 			_vm, _er, _em, _t, _lr, _nlr) \
 	{						\
 		.name		= _name,		\
 		.id		= _id,			\
-		.of_match	= of_match_ptr(_of_match),	\
-		.regulators_node	= of_match_ptr("regulators"),	\
 		.ops		= &_ops,		\
 		.n_voltages	= _n,			\
 		.type		= REGULATOR_VOLTAGE,	\
@@ -37,11 +36,11 @@ enum tps68470_regulators {
 
 /* end of header maybe */
 
-static const struct regulator_linear_range tps68470_ldo_ranges[] = {
+static const struct linear_range tps68470_ldo_ranges[] = {
 	REGULATOR_LINEAR_RANGE(875000, 0, 125, 17800),
 };
 
-static const struct regulator_linear_range tps68470_core_ranges[] = {
+static const struct linear_range tps68470_core_ranges[] = {
 	REGULATOR_LINEAR_RANGE(900000, 0, 42, 25000),
 };
 
@@ -56,25 +55,25 @@ static struct regulator_ops tps68470_regulator_ops = {
 };
 
 static const struct regulator_desc regulators[] = {
-	TPS68470_REGULATOR("CORE", TPS68470_CORE, "core",
+	TPS68470_REGULATOR("CORE", TPS68470_CORE,
 			   tps68470_regulator_ops, 43, TPS68470_REG_VDVAL,
 			   TPS68470_VDVAL_DVOLT_MASK, TPS68470_REG_VDCTL,
 			   TPS68470_VDCTL_EN_MASK,
 			   NULL, tps68470_core_ranges,
 			   ARRAY_SIZE(tps68470_core_ranges)),
-	TPS68470_REGULATOR("ANA", TPS68470_ANA, "ana",
+	TPS68470_REGULATOR("ANA", TPS68470_ANA,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VAVAL,
 			   TPS68470_VAVAL_AVOLT_MASK, TPS68470_REG_VACTL,
 			   TPS68470_VACTL_EN_MASK,
 			   NULL, tps68470_ldo_ranges,
 			   ARRAY_SIZE(tps68470_ldo_ranges)),
-	TPS68470_REGULATOR("VCM", TPS68470_VCM, "vcm",
+	TPS68470_REGULATOR("VCM", TPS68470_VCM,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VCMVAL,
 			   TPS68470_VCMVAL_VCVOLT_MASK, TPS68470_REG_VCMCTL,
 			   TPS68470_VCMCTL_EN_MASK,
 			   NULL, tps68470_ldo_ranges,
 			   ARRAY_SIZE(tps68470_ldo_ranges)),
-	TPS68470_REGULATOR("VIO", TPS68470_VIO, "vio",
+	TPS68470_REGULATOR("VIO", TPS68470_VIO,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VIOVAL,
 			   TPS68470_VIOVAL_IOVOLT_MASK, TPS68470_REG_S_I2C_CTL,
 			   TPS68470_S_I2C_CTL_EN_MASK,
@@ -87,20 +86,20 @@ static const struct regulator_desc regulators[] = {
  * (2) If there is no I2C daisy chain it can be set freely.
  *
  */
-	TPS68470_REGULATOR("VSIO", TPS68470_VSIO, "vsio",
+	TPS68470_REGULATOR("VSIO", TPS68470_VSIO,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VSIOVAL,
 			   TPS68470_VSIOVAL_IOVOLT_MASK, TPS68470_REG_S_I2C_CTL,
 			   TPS68470_S_I2C_CTL_EN_MASK,
 			   NULL, tps68470_ldo_ranges,
 			   ARRAY_SIZE(tps68470_ldo_ranges)),
-	TPS68470_REGULATOR("AUX1", TPS68470_AUX1, "aux1",
+	TPS68470_REGULATOR("AUX1", TPS68470_AUX1,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VAUX1VAL,
 			   TPS68470_VAUX1VAL_AUX1VOLT_MASK,
 			   TPS68470_REG_VAUX1CTL,
 			   TPS68470_VAUX1CTL_EN_MASK,
 			   NULL, tps68470_ldo_ranges,
 			   ARRAY_SIZE(tps68470_ldo_ranges)),
-	TPS68470_REGULATOR("AUX2", TPS68470_AUX2, "aux2",
+	TPS68470_REGULATOR("AUX2", TPS68470_AUX2,
 			   tps68470_regulator_ops, 126, TPS68470_REG_VAUX2VAL,
 			   TPS68470_VAUX2VAL_AUX2VOLT_MASK,
 			   TPS68470_REG_VAUX2CTL,
@@ -123,10 +122,10 @@ static int tps68470_regulator_probe(struct platform_device *pdev)
 
     for (i = 0; i < ARRAY_SIZE(regulators); i++) {
 
-        rdev = devm_regulator_register(&pdev->dev, &regulators[i].desc, &config);
+        rdev = devm_regulator_register(&pdev->dev, &regulators[i], &config);
 
         if (IS_ERR(rdev)) {
-            dev_err(&pdev->dev.parent, "Failed to register %s regulator.\n", pdev->name);
+            dev_err(pdev->dev.parent, "Failed to register %s regulator.\n", pdev->name);
             return PTR_ERR(rdev);
         }
     }
@@ -135,8 +134,8 @@ static int tps68470_regulator_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id tps68470_regulator_id_table[] = {
-    {"tps68470-regulator", },
-    {}
+    { "tps68470-regulator", 0 },
+    { },
 };
 MODULE_DEVICE_TABLE(platform, tps68470_regulator_id_table);
 

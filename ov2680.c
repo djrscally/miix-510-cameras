@@ -453,7 +453,7 @@ static int ov2680_probe(struct i2c_client *client)
 		goto remove_out;
 	}
 
-	xvclk = devm_clk_get(&ov2680->client->dev, "xvclk");
+	xvclk = devm_clk_get(&ov2680->client->dev, "tps68470-clk");
 
 	if (IS_ERR(xvclk)) {
 		dev_err(&client->dev, "xvclk clock missing or invalid.\n");
