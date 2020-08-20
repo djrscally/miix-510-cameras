@@ -11,7 +11,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/gpio/machine.h>
 #include <linux/regmap.h>
-
+#include <linux/mfd/tps68470.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-subdev.h>
@@ -245,6 +245,33 @@ static int ov2680_configure_regulators(struct ov2680_device *ov2680)
 	return ret;
 }
 
+static int ov2680_configure_clock(struct ov2680_device *ov2680)
+{
+	int ret;
+
+	ov2680->xvclk = devm_clk_get(&ov2680->client->dev, "tps68470-clk");
+
+	if (IS_ERR(ov2680->xvclk)) {
+		dev_err(&ov2680->client->dev, "xvclk clock missing or invalid.\n");
+		return PTR_ERR(ov2680->xvclk);
+	}
+
+	ov2680->xvclk_freq = clk_get_rate(ov2680->xvclk);
+
+	if (ov2680->xvclk_freq != OV2680_XVCLK_VALUE) {
+		dev_info(&ov2680->client->dev, "wrong xvclk frequency %d HZ, expected: %d Hz\n", ov2680->xvclk_freq, OV2680_XVCLK_VALUE);
+
+		ret = clk_set_rate(ov2680->xvclk, OV2680_XVCLK_VALUE);
+
+		if (ret < 0) {
+			dev_err(&ov2680->client->dev, "Error setting xvclk rate.\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static int ov2680_power_on(struct ov2680_device *ov2680)
 /*
  * Powers on the camera sensor. The process for this is to bring online 
@@ -256,7 +283,7 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 	int ret;
 
 	if (ov2680->is_enabled) {
-		dev_dbg(&ov2680->client->dev, "ov2680_power_on called when chip already is_enabled.\n");
+		dev_info(&ov2680->client->dev, "ov2680_power_on called when chip already is_enabled.\n");
 		return 0;
 	}
 
@@ -280,7 +307,19 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 
     usleep_range(10000, 11000);
 
+	ret = clk_prepare_enable(ov2680->xvclk);
+
+	if (ret < 0) {
+		dev_err(&ov2680->client->dev, "An error occurred enabling the clock.\n");
+		return ret;
+	}
+
 	ov2680->is_enabled = 1;
+
+	/* switch on / off */
+	ov2680_write_reg(ov2680->client, OV2680_8BIT, OV2680_REG_STREAM_CTRL, 0x01);
+	usleep_range(1000, 2000);
+	ov2680_write_reg(ov2680->client, OV2680_8BIT, OV2680_REG_STREAM_CTRL, 0x00);
 
 	return 0;
 }
@@ -290,20 +329,22 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 	int ret;
 
 	if (!ov2680->is_enabled) {
-		dev_dbg(&ov2680->client->dev, "ov2680_power_off called when chip already offline.\n");
+		dev_info(&ov2680->client->dev, "ov2680_power_off called when chip already offline.\n");
 		return 0;
 	}
 
+	clk_disable_unprepare(ov2680->xvclk);
+
 	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
 	usleep_range(10000, 11000);
-
+	
 	gpiod_set_value_cansleep(ov2680->s_enable, 0);
 	gpiod_set_value_cansleep(ov2680->s_idle, 0);
-
+	
 	ret = regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
-
+	
 	if (ret) {
-		dev_dbg(&ov2680->client->dev, "Error disabling the regulators.\n");
+		dev_err(&ov2680->client->dev, "Error disabling the regulators.\n");
 		return 1;
 	}
 
@@ -341,7 +382,7 @@ static int ov2680_s_stream(struct v4l2_subdev *sd, int enable)
 	int ret;
 
 	if (ov2680->is_streaming == enable) {
-		dev_dbg(&ov2680->client->dev, "Attempt to set stream=%d, but it is already in that state.\n", enable);
+		dev_info(&ov2680->client->dev, "Attempt to set stream=%d, but it is already in that state.\n", enable);
 		return 0;
 	}
 
@@ -350,9 +391,10 @@ static int ov2680_s_stream(struct v4l2_subdev *sd, int enable)
 
 	if (ret) {
 		dev_err(&ov2680->client->dev, "An error occurred setting stream enabled=%d.\n", enable);
+		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int ov2680_register(struct v4l2_subdev *sd)
@@ -400,7 +442,6 @@ static int ov2680_remove(struct i2c_client *client)
 	gpiod_put(ov2680->s_enable);
 	gpiod_put(ov2680->s_idle);
 	gpiod_put(ov2680->s_resetn);
-
 	gpiod_remove_lookup_table(ov2680->gpios);
 
 	v4l2_device_unregister_subdev(sd);
@@ -411,8 +452,7 @@ static int ov2680_remove(struct i2c_client *client)
 static int ov2680_probe(struct i2c_client *client)
 {
 	struct ov2680_device 		*ov2680;
-	int 						ret;
-	struct clk     				*xvclk;
+	int 						ret;	
 
 	ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
 	if (!ov2680) {
@@ -446,19 +486,23 @@ static int ov2680_probe(struct i2c_client *client)
 		goto remove_out;
 	}
 
-	ret = ov2680_power_on(ov2680);
+	/* Configure the clock */
+	ret = ov2680_configure_clock(ov2680);
 
 	if (ret) {
-		dev_dbg(&client->dev, "Could not power on the ov2680 due to a regulator fault.\n");
+		dev_dbg(&client->dev, "Could not configure clock.\n");
 		goto remove_out;
 	}
 
-	xvclk = devm_clk_get(&ov2680->client->dev, "tps68470-clk");
+	/* Power up */
+	ret = ov2680_power_on(ov2680);
 
-	if (IS_ERR(xvclk)) {
-		dev_err(&client->dev, "xvclk clock missing or invalid.\n");
+	if (ret) {
+		dev_err(&client->dev, "Could not power on the ov2680.\n");
+		goto remove_out;
 	}
 
+	/* Check that we are in fact an ov2680 device */
     ret = ov2680_check_ov2680_id(client);
 
 	if (ret) {
@@ -500,6 +544,9 @@ static int ov2680_probe(struct i2c_client *client)
 		printk(KERN_CRIT "oops.\n");
 		goto remove_out;
 	}
+
+	/* Shut down till we're needed */
+	ov2680_power_off(ov2680);
 
     return 0;
 

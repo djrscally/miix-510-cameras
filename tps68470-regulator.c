@@ -2,6 +2,8 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/mfd/tps68470.h>
+#include <linux/regulator/machine.h>
+#include <linux/regmap.h>
 #include <linux/mod_devicetable.h>
 
 /* header maybe */
@@ -15,6 +17,9 @@ enum tps68470_regulators {
     TPS68470_AUX1,
     TPS68470_AUX2,
 };
+
+#define to_tps68470_regulator(rdev) \
+	container_of(rdev, struct tps68470_regulator, rdev)
 
 #define TPS68470_REGULATOR(_name, _id, _ops, _n, _vr,	\
 			_vm, _er, _em, _t, _lr, _nlr) \
@@ -33,6 +38,23 @@ enum tps68470_regulators {
 		.linear_ranges	= _lr,			\
 		.n_linear_ranges = _nlr,		\
 	}
+
+#define tps68470_reg_init_data(_name, _min_uV, _max_uV)\
+{\
+	.constraints = {\
+		.name = (const char *)_name,\
+		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE	\
+			| REGULATOR_CHANGE_STATUS,\
+		.min_uV = _min_uV,\
+		.max_uV = _max_uV,\
+	},\
+}
+
+struct tps68470_regulator {
+	struct regulator_dev	rdev;
+	struct regmap			*regmap;
+	struct regulator_config	config;
+};
 
 /* end of header maybe */
 
@@ -108,26 +130,47 @@ static const struct regulator_desc regulators[] = {
 			   ARRAY_SIZE(tps68470_ldo_ranges)),
 };
 
+
+struct regulator_init_data tps68470_init[] = {
+	tps68470_reg_init_data("CORE", 900000, 1950000),
+	tps68470_reg_init_data("ANA", 875000, 3100000),
+	tps68470_reg_init_data("VCM", 875000, 3100000),
+	tps68470_reg_init_data("VIO", 875000, 3100000),
+	tps68470_reg_init_data("VSIO", 875000, 3100000),
+	tps68470_reg_init_data("AUX1", 875000, 3100000),
+	tps68470_reg_init_data("AUX2", 875000, 3100000),
+};
+
 static int tps68470_regulator_probe(struct platform_device *pdev)
 {
-    struct regulator_config config = {};
     struct regulator_dev *rdev;
+	struct tps68470_regulator *tps68470_regulator;
     struct regmap *tps68470_regmap;
     int i;
 
     tps68470_regmap = dev_get_drvdata(pdev->dev.parent);
 
-    config.dev = &pdev->dev;
-    config.regmap = tps68470_regmap;
+	for (i = 0; i < ARRAY_SIZE(regulators); i++) {
 
-    for (i = 0; i < ARRAY_SIZE(regulators); i++) {
+		tps68470_regulator = devm_kzalloc(&pdev->dev, sizeof(*tps68470_regulator), GFP_KERNEL);
 
-        rdev = devm_regulator_register(&pdev->dev, &regulators[i], &config);
+		if (!tps68470_regulator) {
+			return -ENOMEM;
+		}
+
+		tps68470_regulator->regmap = tps68470_regmap;
+   	 	tps68470_regulator->config.dev = &pdev->dev;
+	    tps68470_regulator->config.regmap = tps68470_regmap;
+		tps68470_regulator->config.init_data = &tps68470_init[i];
+
+        tps68470_regulator->rdev = *devm_regulator_register(&pdev->dev, &regulators[i], &tps68470_regulator->config);
 
         if (IS_ERR(rdev)) {
             dev_err(pdev->dev.parent, "Failed to register %s regulator.\n", pdev->name);
             return PTR_ERR(rdev);
-        }
+        } else {
+			dev_err(pdev->dev.parent, "Successfully registered regulator %s for %s.\n", tps68470_regulator->rdev.desc->name, pdev->name);
+		}
     }
 
     return 0;
@@ -148,6 +191,11 @@ static struct platform_driver tps68470_regulator_driver = {
 };
 module_platform_driver(tps68470_regulator_driver);
 
-MODULE_AUTHOR("Daniel Scally <djrscally@gmail.com>");
-MODULE_DESCRIPTION("TPS68470 Regulator Driver");
+MODULE_AUTHOR("Zaikuo Wang <zaikuo.wang@intel.com>");
+MODULE_AUTHOR("Tianshu Qiu <tian.shu.qiu@intel.com>");
+MODULE_AUTHOR("Jian Xu Zheng <jian.xu.zheng@intel.com>");
+MODULE_AUTHOR("Yuning Pu <yuning.pu@intel.com>");
+MODULE_AUTHOR("Rajmohan Mani <rajmohan.mani@intel.com>");
+MODULE_DESCRIPTION("TPS68470 voltage regulator driver");
+MODULE_AUTHOR("Daniel Scally <djrscally@protonmail.com>");
 MODULE_LICENSE("GPL v2");

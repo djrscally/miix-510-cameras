@@ -1,9 +1,11 @@
+#define OV2680_XVCLK_VALUE			24000000
+
 #define OV2680_ID_REG_HIGH          0x300a
 #define OV2680_ID_REG_LOW           0x300b
 #define I2C_MSG_LENGTH              0x02
 #define OV2680_ID                   0x2680
 #define OV2680_SC_CMMN_SUB_ID	    0x302A
-#define OV2680_NUM_SUPPLIES			10
+#define OV2680_NUM_SUPPLIES			7
 
 #define OV2680_REG_STREAM_CTRL		0x0100
 #define OV2680_REG_SOFT_RESET		0x0103
@@ -31,9 +33,6 @@
 #define OV2680_HEIGHT_MAX		1200
 
 static const char * const ov2680_supply_names[] = {
-	"dovdd",		/* Digital I/O Power */
-	"avdd",			/* Analog Power */
-	"dvdd",			/* Digital Core Power */
 	"CORE",
 	"ANA",
 	"VCM",
@@ -91,6 +90,8 @@ struct ov2680_device {
     struct i2c_client       	*client;			/* client for this physical device */
 	struct device				*pmic_dev;			/* physical device for the sensor's PMIC */
 	struct v4l2_subdev			sd;
+	struct clk					*xvclk;
+	u32							xvclk_freq;
 
 	/* GPIO pins to turn on the PMIC */
     struct gpio_desc        	*gpio0;
@@ -104,7 +105,7 @@ struct ov2680_device {
 
 	/* Miscellaneous gubbins */
 	struct mutex				lock;
-	struct regulator_bulk_data	supplies[3];
+	struct regulator_bulk_data	supplies[OV2680_NUM_SUPPLIES];
 	short						is_enabled;
 
 	/* V4L2 Infrastructure */
