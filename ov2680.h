@@ -32,6 +32,18 @@
 #define OV2680_WIDTH_MAX		1600
 #define OV2680_HEIGHT_MAX		1200
 
+enum ov2680_mode_id {
+	OV2680_MODE_QUXGA_800_600,
+	OV2680_MODE_720P_1280_720,
+	OV2680_MODE_UXGA_1600_1200,
+	OV2680_MODE_MAX,
+};
+
+struct reg_value {
+	u16 reg_addr;
+	u8 val;
+};
+
 static const char * const ov2680_supply_names[] = {
 	"CORE",
 	"ANA",
@@ -55,6 +67,15 @@ struct ov2680_reg {
 	enum ov2680_tok_type type;
 	u16 reg;
 	u32 val;	/* @set value for read/mod/write, @mask */
+};
+
+struct ov2680_mode_info {
+	const char *name;
+	enum ov2680_mode_id id;
+	u32 width;
+	u32 height;
+	const struct reg_value *reg_data;
+	u32 reg_data_size;
 };
 
 struct ov2680_ctrls {
@@ -87,32 +108,89 @@ static struct gpiod_lookup_table ov2680_gpios = {
 
 struct ov2680_device {
 	/* references */
-    struct i2c_client       	*client;			/* client for this physical device */
-	struct device				*pmic_dev;			/* physical device for the sensor's PMIC */
-	struct v4l2_subdev			sd;
-	struct clk					*xvclk;
-	u32							xvclk_freq;
+    struct i2c_client       		*client;			/* client for this physical device */
+	struct device					*pmic_dev;			/* physical device for the sensor's PMIC */
+	struct v4l2_subdev				sd;
+	struct clk						*xvclk;
+	u32								xvclk_freq;
+	const struct ov2680_mode_info	*current_mode;
 
 	/* GPIO pins to turn on the PMIC */
-    struct gpio_desc        	*gpio0;
-    struct gpio_desc        	*gpio1;
+    struct gpio_desc        		*gpio0;
+    struct gpio_desc        		*gpio1;
 
 	/* GPIO pins to turn on the sensor */
-	struct gpiod_lookup_table	*gpios;
-	struct gpio_desc			*s_enable;
-	struct gpio_desc			*s_idle;
-	struct gpio_desc			*s_resetn;
+	struct gpiod_lookup_table		*gpios;
+	struct gpio_desc				*s_enable;
+	struct gpio_desc				*s_idle;
+	struct gpio_desc				*s_resetn;
 
 	/* Miscellaneous gubbins */
-	struct mutex				lock;
-	struct regulator_bulk_data	supplies[OV2680_NUM_SUPPLIES];
-	short						is_enabled;
+	struct mutex					lock;
+	struct regulator_bulk_data		supplies[OV2680_NUM_SUPPLIES];
+	short							is_enabled;
 
 	/* V4L2 Infrastructure */
-	struct ov2680_ctrls			ctrls;
-	short						is_streaming;
-	struct media_pad			pad;
-
-
+	struct ov2680_ctrls				ctrls;
+	short							is_streaming;
+	bool							mode_pending_changes;
+	struct media_pad				pad;
+	struct v4l2_mbus_framefmt		fmt;
+	struct v4l2_fract				frame_interval;
 };
 
+static const char * const test_pattern_menu[] = {
+	"Disabled",
+	"Color Bars",
+	"Random Data",
+	"Square",
+	"Black Image",
+};
+
+static const int ov2680_hv_flip_bayer_order[] = {
+	MEDIA_BUS_FMT_SBGGR10_1X10,
+	MEDIA_BUS_FMT_SGRBG10_1X10,
+	MEDIA_BUS_FMT_SGBRG10_1X10,
+	MEDIA_BUS_FMT_SRGGB10_1X10,
+};
+
+static const struct reg_value ov2680_setting_30fps_QUXGA_800_600[] = {
+	{0x3086, 0x01}, {0x370a, 0x23}, {0x3808, 0x03}, {0x3809, 0x20},
+	{0x380a, 0x02}, {0x380b, 0x58}, {0x380c, 0x06}, {0x380d, 0xac},
+	{0x380e, 0x02}, {0x380f, 0x84}, {0x3811, 0x04}, {0x3813, 0x04},
+	{0x3814, 0x31}, {0x3815, 0x31}, {0x3820, 0xc0}, {0x4008, 0x00},
+	{0x4009, 0x03}, {0x4837, 0x1e}, {0x3501, 0x4e}, {0x3502, 0xe0},
+};
+
+static const struct reg_value ov2680_setting_30fps_720P_1280_720[] = {
+	{0x3086, 0x00}, {0x3808, 0x05}, {0x3809, 0x00}, {0x380a, 0x02},
+	{0x380b, 0xd0}, {0x380c, 0x06}, {0x380d, 0xa8}, {0x380e, 0x05},
+	{0x380f, 0x0e}, {0x3811, 0x08}, {0x3813, 0x06}, {0x3814, 0x11},
+	{0x3815, 0x11}, {0x3820, 0xc0}, {0x4008, 0x00},
+};
+
+static const struct reg_value ov2680_setting_30fps_UXGA_1600_1200[] = {
+	{0x3086, 0x00}, {0x3501, 0x4e}, {0x3502, 0xe0}, {0x3808, 0x06},
+	{0x3809, 0x40}, {0x380a, 0x04}, {0x380b, 0xb0}, {0x380c, 0x06},
+	{0x380d, 0xa8}, {0x380e, 0x05}, {0x380f, 0x0e}, {0x3811, 0x00},
+	{0x3813, 0x00}, {0x3814, 0x11}, {0x3815, 0x11}, {0x3820, 0xc0},
+	{0x4008, 0x00}, {0x4837, 0x18}
+};
+
+static const struct ov2680_mode_info ov2680_mode_init_data = {
+	"mode_quxga_800_600", OV2680_MODE_QUXGA_800_600, 800, 600,
+	ov2680_setting_30fps_QUXGA_800_600,
+	ARRAY_SIZE(ov2680_setting_30fps_QUXGA_800_600),
+};
+
+static const struct ov2680_mode_info ov2680_mode_data[OV2680_MODE_MAX] = {
+	{"mode_quxga_800_600", OV2680_MODE_QUXGA_800_600,
+	 800, 600, ov2680_setting_30fps_QUXGA_800_600,
+	 ARRAY_SIZE(ov2680_setting_30fps_QUXGA_800_600)},
+	{"mode_720p_1280_720", OV2680_MODE_720P_1280_720,
+	 1280, 720, ov2680_setting_30fps_720P_1280_720,
+	 ARRAY_SIZE(ov2680_setting_30fps_720P_1280_720)},
+	{"mode_uxga_1600_1200", OV2680_MODE_UXGA_1600_1200,
+	 1600, 1200, ov2680_setting_30fps_UXGA_1600_1200,
+	 ARRAY_SIZE(ov2680_setting_30fps_UXGA_1600_1200)},
+};

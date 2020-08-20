@@ -6,19 +6,6 @@ This repo will, once complete, hold drivers for the webcams for the Lenovo Miix 
 
 No, this is very much a work in progress. The 5648 driver isn't in a state worth committing yet. The 2680 driver will at least turn on the camera and read the sensor id on the chip to confirm it's working correctly, but you can't get an image yet.
 
-### I want them precious. How do I get them?
-
-If you really really want these ugly, barely functional work-in-progress drivers, you can do this:
-
-```
-$ git clone https://github.com/djrscally/miix-510-cameras  
-$ cd miix-510-cameras  
-$ make
-$ sudo insmod ./ov2680.ko
-```
-
-And that should be it.
-
 ### Why was this so difficult?
 
 There's a few problems:
@@ -62,4 +49,4 @@ Continue? [y/N] y
 0x26 0x80
 ```
 
-That command basically says "write two bytes (being 0x30 and 0x0a) to bus 7 addr 0x10, then read two bytes". The two bytes we write are the address of the register we're interested in, and we learn that the value stored there is 0x26 and 0x80, I.E. 2680! We detected the chip, hooray. Putting that into the drivers is a bit more difficult. It doesn't really make sense to turn the GPIO pins for the PMIC on in this driver; that ought really to go into that modules driver.
+That command basically says "write two bytes (being 0x30 and 0x0a) to bus 7 addr 0x10, then read two bytes". The two bytes we write are the address of the register we're interested in, and we learn that the value stored there is 0x26 and 0x80, I.E. 2680! We detected the chip, hooray. Putting that into the drivers is a bit more difficult. It doesn't really make sense to turn the GPIO pins for the PMIC on in this driver; that ought really to go into that modules driver. Similarly we need to get regulators and clocks that are provided by the PMIC. All these things require the PMIC to have drivers to provide them. THe kernel has gpio drivers for this PMIC already, but no regulator or clock ones. There were some old ones lying around on Intel's lts 4.14 branch so I've appropriated those and tweaked them to compile into the up to date kernel.
