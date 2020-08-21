@@ -944,6 +944,10 @@ static int ov2680_mode_init(struct ov2680_device *sensor)
 	return 0;
 }
 
+static const struct media_entity_operations ov2680_subdev_entity_ops = {
+	.link_validate	= v4l2_subdev_link_validate,
+};
+
 static int ov2680_v4l2_register(struct ov2680_device *sensor)
 {
 	const struct v4l2_ctrl_ops *ops = &ov2680_ctrl_ops;
@@ -954,11 +958,11 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	v4l2_i2c_subdev_init(&sensor->sd, sensor->client,
 			     &ov2680_subdev_ops);
 
-#ifdef CONFIG_VIDEO_V4L2_SUBDEV_API
-	sensor->sd.flags = V4L2_SUBDEV_FL_HAS_DEVNODE;
-#endif
 	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
+	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
+	sensor->sd.entity.ops = &ov2680_subdev_entity_ops;
+	sensor->sd.fwnode = sensor->client->dev.fwnode;
 
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
 	if (ret < 0)
@@ -1022,10 +1026,6 @@ static int ov2680_register(struct v4l2_subdev *sd)
 
 static const struct v4l2_subdev_internal_ops ov2680_internal_ops = {
 	.registered		= ov2680_register,
-};
-
-static const struct media_entity_operations ov2680_subdev_entity_ops = {
-	.link_validate	= v4l2_subdev_link_validate,
 };
 
 static int ov2680_remove(struct i2c_client *client)
