@@ -4,3 +4,6 @@
 *.mod*
 *.order*
 *.symvers
+**.aml
+**.hex
+**.log
