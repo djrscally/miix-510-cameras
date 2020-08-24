@@ -1099,6 +1099,12 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 
 	hdl->lock = &sensor->lock;
 
+	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ, 0, 0, link_freq_menu_items);
+	
+	if (ctrls->link_freq) {
+		ctrls->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	}
+
 	ctrls->vflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
 	ctrls->hflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
 

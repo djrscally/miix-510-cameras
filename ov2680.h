@@ -44,6 +44,51 @@ struct reg_value {
 	u8 val;
 };
 
+struct ov2680_reg_list {
+	u32 num_of_regs;
+	const struct reg_value *regs;
+};
+
+struct ov2680_link_freq_config {
+	u32 pixel_rate;
+	const struct ov2680_reg_list reg_list;
+};
+
+static const struct reg_value mipi_data_rate_840mbps[] = {
+	{0x0300, 0x04},
+	{0x0301, 0x00},
+	{0x0302, 0x84},
+	{0x0303, 0x00},
+	{0x0304, 0x03},
+	{0x0305, 0x01},
+	{0x0306, 0x01},
+	{0x030a, 0x00},
+	{0x030b, 0x00},
+	{0x030c, 0x00},
+	{0x030d, 0x26},
+	{0x030e, 0x00},
+	{0x030f, 0x06},
+	{0x0312, 0x01},
+	{0x3031, 0x0a},
+};
+
+#define OV2680_LINK_FREQ_422MHZ			422400000
+#define OV2680_LINK_FREQ_422MHZ_INDEX	0
+
+static const struct ov2680_link_freq_config link_freq_configs[] = {
+	{
+		.pixel_rate = (OV2680_LINK_FREQ_422MHZ * 2 * 2) / 10,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(mipi_data_rate_840mbps),
+			.regs = mipi_data_rate_840mbps,
+		}
+	}
+};
+
+static const s64 link_freq_menu_items[] = {
+	OV2680_LINK_FREQ_422MHZ
+};
+
 static const char * const ov2680_supply_names[] = {
 	"CORE",
 	"ANA",
@@ -92,6 +137,7 @@ struct ov2680_ctrls {
 	struct v4l2_ctrl *hflip;
 	struct v4l2_ctrl *vflip;
 	struct v4l2_ctrl *test_pattern;
+	struct v4l2_ctrl *link_freq;
 };
 
 /* GPIO Mapping for the camera */
