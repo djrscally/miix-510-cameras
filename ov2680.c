@@ -36,6 +36,8 @@ static int ov2680_read_reg(struct i2c_client *client, u16 data_length, u16 reg, 
 	struct i2c_msg msg[2];
 	unsigned char data[6];
 
+	dev_info (&client->dev, "%s was called.\n", __func__);
+
 	if (!client->adapter) {
 		dev_err(&client->dev, "%s error, no client->adapter\n",
 			__func__);
@@ -94,6 +96,8 @@ static int ov2680_i2c_write(struct i2c_client *client, u16 len, u8 *data)
 	const int num_msg = 1;
 	int ret;
 
+	dev_info (&client->dev, "%s was called.\n", __func__);
+
 	msg.addr = client->addr;
 	msg.flags = 0;
 	msg.len = len;
@@ -110,6 +114,8 @@ static int ov2680_write_reg(struct i2c_client *client, u16 data_length,
 	unsigned char data[4] = {0};
 	u16 *wreg = (u16 *)data;
 	const u16 len = data_length + sizeof(u16); /* 16-bit address + data */
+
+	dev_info (&client->dev, "%s was called.\n", __func__);
 
 	if (data_length != OV2680_8BIT && data_length != OV2680_16BIT) {
 		dev_err(&client->dev,
@@ -142,6 +148,8 @@ static int ov2680_mod_reg(struct ov2680_device *sensor, u16 reg, u8 mask, u16 va
 	u32 readval;
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_read_reg(sensor->client, 1, reg, &readval);
 	if (ret < 0)
 		return ret;
@@ -160,6 +168,8 @@ static int ov2680_load_regs(struct ov2680_device *sensor, const struct ov2680_mo
 	int ret = 0;
 	u16 reg_addr;
 	u16 val;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	for (i = 0; i < mode->reg_data_size; ++i, ++regs) {
 		reg_addr = regs->reg_addr;
@@ -180,6 +190,8 @@ static int ov2680_check_ov2680_id(struct i2c_client *client)
 	int ret;
 	u16 id;
 	u8 revision;
+
+	dev_info (&client->dev, "%s was called.\n", __func__);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C))
 		return -ENODEV;
@@ -224,6 +236,9 @@ static int ov2680_configure_gpios(struct ov2680_device *ov2680)
  * that way if I was wiring it.
  */
 {
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
+
 	gpiod_add_lookup_table(ov2680->gpios);
 
 	ov2680->s_enable = gpiod_get_index(&ov2680->client->dev, "s_enable", 0, GPIOD_OUT_HIGH);
@@ -262,6 +277,8 @@ static int ov2680_configure_regulators(struct ov2680_device *ov2680)
 {
 	int ret;
 
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
+
     /* configure and enable regulators */
 	int i;
     for (i = 0; i < OV2680_NUM_SUPPLIES; i++) {
@@ -277,22 +294,24 @@ static int ov2680_configure_clock(struct ov2680_device *ov2680)
 {
 	int ret;
 
-	ov2680->xvclk = devm_clk_get(&ov2680->client->dev, "tps68470-clk");
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
 
-	if (IS_ERR(ov2680->xvclk)) {
-		dev_err(&ov2680->client->dev, "xvclk clock missing or invalid.\n");
-		return PTR_ERR(ov2680->xvclk);
+	ov2680->clk = devm_clk_get(&ov2680->client->dev, "tps68470-clk");
+
+	if (IS_ERR(ov2680->clk)) {
+		dev_err(&ov2680->client->dev, "tps68470 clock missing or invalid.\n");
+		return PTR_ERR(ov2680->clk);
 	}
 
-	ov2680->xvclk_freq = clk_get_rate(ov2680->xvclk);
+	ov2680->clk_freq = clk_get_rate(ov2680->clk);
 
-	if (ov2680->xvclk_freq != OV2680_XVCLK_VALUE) {
-		dev_info(&ov2680->client->dev, "wrong xvclk frequency %d HZ, expected: %d Hz\n", ov2680->xvclk_freq, OV2680_XVCLK_VALUE);
+	if (ov2680->clk_freq != OV2680_clk_VALUE) {
+		dev_info(&ov2680->client->dev, "wrong clock frequency %d HZ, expected: %d Hz\n", ov2680->clk_freq, OV2680_clk_VALUE);
 
-		ret = clk_set_rate(ov2680->xvclk, OV2680_XVCLK_VALUE);
+		ret = clk_set_rate(ov2680->clk, OV2680_clk_VALUE);
 
 		if (ret < 0) {
-			dev_err(&ov2680->client->dev, "Error setting xvclk rate.\n");
+			dev_err(&ov2680->client->dev, "Error setting clock rate.\n");
 			return -EINVAL;
 		}
 	}
@@ -309,6 +328,8 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 */
 {
 	int ret;
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
 
 	if (ov2680->is_enabled) {
 		dev_info(&ov2680->client->dev, "ov2680_power_on called when chip already is_enabled.\n");
@@ -335,7 +356,7 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 
     usleep_range(10000, 11000);
 
-	ret = clk_prepare_enable(ov2680->xvclk);
+	ret = clk_prepare_enable(ov2680->clk);
 
 	if (ret < 0) {
 		dev_err(&ov2680->client->dev, "An error occurred enabling the clock.\n");
@@ -356,12 +377,14 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 {
 	int ret;
 
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
+
 	if (!ov2680->is_enabled) {
 		dev_info(&ov2680->client->dev, "ov2680_power_off called when chip already offline.\n");
 		return 0;
 	}
 
-	clk_disable_unprepare(ov2680->xvclk);
+	clk_disable_unprepare(ov2680->clk);
 
 	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
 	usleep_range(10000, 11000);
@@ -388,6 +411,8 @@ static int ov2680_bayer_order(struct ov2680_device *sensor)
 	u32 format1, format2, hv_flip;
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_read_reg(sensor->client, 1, OV2680_REG_FORMAT1, &format1);
 	if (ret < 0)
 		return ret;
@@ -407,6 +432,8 @@ static int ov2680_vflip_enable(struct ov2680_device *sensor)
 {
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_mod_reg(sensor, OV2680_REG_FORMAT1, BIT(2), BIT(2));
 	if (ret < 0)
 		return ret;
@@ -417,6 +444,8 @@ static int ov2680_vflip_enable(struct ov2680_device *sensor)
 static int ov2680_vflip_disable(struct ov2680_device *sensor)
 {
 	int ret;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	ret = ov2680_mod_reg(sensor, OV2680_REG_FORMAT1, BIT(2), BIT(0));
 	if (ret < 0)
@@ -430,6 +459,8 @@ static int ov2680_hflip_enable(struct ov2680_device *sensor)
 {
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_mod_reg(sensor, OV2680_REG_FORMAT2, BIT(2), BIT(2));
 	if (ret < 0)
 		return ret;
@@ -441,6 +472,8 @@ static int ov2680_hflip_disable(struct ov2680_device *sensor)
 {
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_mod_reg(sensor, OV2680_REG_FORMAT2, BIT(2), BIT(0));
 	if (ret < 0)
 		return ret;
@@ -451,6 +484,8 @@ static int ov2680_hflip_disable(struct ov2680_device *sensor)
 static int ov2680_test_pattern_set(struct ov2680_device *sensor, int value)
 {
 	int ret;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	if (!value)
 		return ov2680_mod_reg(sensor, OV2680_REG_ISP_CTRL00, BIT(7), 0);
@@ -472,6 +507,8 @@ static int ov2680_gain_set(struct ov2680_device *sensor, bool auto_gain)
 	u16 gain;
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_mod_reg(sensor, OV2680_REG_R_MANUAL, BIT(1),
 			     auto_gain ? 0 : BIT(1));
 	if (ret < 0)
@@ -492,6 +529,8 @@ static int ov2680_gain_get(struct ov2680_device *sensor)
 	u32 gain;
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_read_reg(sensor->client, 2, OV2680_REG_GAIN_PK, &gain);
 	if (ret)
 		return ret;
@@ -505,6 +544,8 @@ static int ov2680_exposure_set(struct ov2680_device *sensor, bool auto_exp)
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	u32 exp;
 	int ret;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	ret = ov2680_mod_reg(sensor, OV2680_REG_R_MANUAL, BIT(0),
 			     auto_exp ? 0 : BIT(0));
@@ -525,6 +566,8 @@ static int ov2680_exposure_get(struct ov2680_device *sensor)
 	int ret;
 	u32 exp;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_read_reg(sensor->client, 3, OV2680_REG_EXPOSURE_PK_HIGH, &exp);
 	if (ret)
 		return ret;
@@ -534,11 +577,17 @@ static int ov2680_exposure_get(struct ov2680_device *sensor)
 
 static int ov2680_stream_enable(struct ov2680_device *sensor)
 {
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	return ov2680_write_reg(sensor->client, 1, OV2680_REG_STREAM_CTRL, 1);
 }
 
 static int ov2680_stream_disable(struct ov2680_device *sensor)
 {
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	return ov2680_write_reg(sensor->client, 1, OV2680_REG_STREAM_CTRL, 0);
 }
 
@@ -547,6 +596,8 @@ static int ov2680_mode_set(struct ov2680_device *sensor)
 {
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	int ret;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	ret = ov2680_gain_set(sensor, false);
 	if (ret < 0)
@@ -581,6 +632,8 @@ static int ov2680_mode_restore(struct ov2680_device *sensor)
 {
 	int ret;
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	ret = ov2680_load_regs(sensor, &ov2680_mode_init_data);
 	if (ret < 0)
 		return ret;
@@ -594,6 +647,8 @@ static int ov2680_s_power(struct v4l2_subdev *sd, int on)
 	struct ov2680_device *ov2680;
 
 	ov2680 = to_ov2680_dev(sd);
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
 
 	mutex_lock(&ov2680->lock);
 
@@ -629,6 +684,8 @@ static int ov2680_s_g_frame_interval(struct v4l2_subdev *sd, struct v4l2_subdev_
 {
 	struct ov2680_device *sensor = to_ov2680_dev(sd);
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	mutex_lock(&sensor->lock);
 	fi->interval = sensor->frame_interval;
 	mutex_unlock(&sensor->lock);
@@ -640,6 +697,8 @@ static int ov2680_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct ov2680_device *ov2680 = to_ov2680_dev(sd);
 	int ret;
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
 
 	if (ov2680->is_streaming == enable) {
 		dev_info(&ov2680->client->dev, "Attempt to set stream=%d, but it is already in that state.\n", enable);
@@ -678,6 +737,8 @@ static int ov2680_enum_mbus_code(struct v4l2_subdev *sd,
 {
 	struct ov2680_device *sensor = to_ov2680_dev(sd);
 
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+
 	if (code->pad != 0 || code->index != 0)
 		return -EINVAL;
 
@@ -712,7 +773,7 @@ static int ov2680_get_fmt(struct v4l2_subdev *sd,
 
 	if (fmt)
 		format->format = *fmt;
-
+	
 	mutex_unlock(&sensor->lock);
 
 	return ret;
@@ -724,6 +785,9 @@ static int ov2680_set_fmt(struct v4l2_subdev *sd,
 {
 	struct ov2680_device *sensor = to_ov2680_dev(sd);
 	struct v4l2_mbus_framefmt *fmt = &format->format;
+
+	dev_info(&sensor->client->dev, "%s was called.\n", __func__);
+
 #ifdef CONFIG_VIDEO_V4L2_SUBDEV_API
 	struct v4l2_mbus_framefmt *try_fmt;
 #endif
@@ -736,6 +800,7 @@ static int ov2680_set_fmt(struct v4l2_subdev *sd,
 	mutex_lock(&sensor->lock);
 
 	if (sensor->is_streaming) {
+		dev_info(&sensor->client->dev, "Sensor is busy streaming.\n");
 		ret = -EBUSY;
 		goto unlock;
 	}
@@ -765,6 +830,8 @@ static int ov2680_set_fmt(struct v4l2_subdev *sd,
 	sensor->fmt = format->format;
 	sensor->mode_pending_changes = true;
 
+	dev_info(&sensor->client->dev, "    mode %s (%dx%d)\n", mode->name, mode->width, mode->height);
+
 unlock:
 	mutex_unlock(&sensor->lock);
 
@@ -774,6 +841,11 @@ unlock:
 static int ov2680_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_pad_config *cfg)
 {
+	struct ov2680_device *ov2680;
+	ov2680 = to_ov2680_dev(sd);
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
+
 	struct v4l2_subdev_format fmt = {
 		.which = cfg ? V4L2_SUBDEV_FORMAT_TRY
 				: V4L2_SUBDEV_FORMAT_ACTIVE,
@@ -790,13 +862,23 @@ static int ov2680_enum_frame_size(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_pad_config *cfg,
 				  struct v4l2_subdev_frame_size_enum *fse)
 {
+	struct ov2680_device *ov2680;
+	ov2680 = to_ov2680_dev(sd);
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
+
 	int index = fse->index;
+
+	dev_info(&ov2680->client->dev, "    index was %d.\n", index);
 
 	if (index >= OV2680_MODE_MAX || index < 0)
 		return -EINVAL;
 
 	fse->min_width = ov2680_mode_data[index].width;
 	fse->min_height = ov2680_mode_data[index].height;
+
+	dev_info(&ov2680->client->dev, "    frame size: %dx%d.\n", fse->min_width, fse->min_height);
+
 	fse->max_width = ov2680_mode_data[index].width;
 	fse->max_height = ov2680_mode_data[index].height;
 
@@ -808,6 +890,10 @@ static int ov2680_enum_frame_interval(struct v4l2_subdev *sd,
 			      struct v4l2_subdev_frame_interval_enum *fie)
 {
 	struct v4l2_fract tpf;
+	struct ov2680_device *ov2680;
+	ov2680 = to_ov2680_dev(sd);
+
+	dev_info (&ov2680->client->dev, "%s was called.\n", __func__);
 
 	if (fie->index >= OV2680_MODE_MAX || fie->width > OV2680_WIDTH_MAX ||
 	    fie->height > OV2680_HEIGHT_MAX ||
@@ -828,6 +914,8 @@ static int ov2680_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 	struct ov2680_device *sensor = to_ov2680_dev(sd);
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	int val;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	if (!sensor->is_enabled)
 		return 0;
@@ -855,6 +943,8 @@ static int ov2680_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct v4l2_subdev *sd = ctrl_to_sd(ctrl);
 	struct ov2680_device *sensor = to_ov2680_dev(sd);
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
+
+	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
 	if (!sensor->is_enabled)
 		return 0;
@@ -890,6 +980,42 @@ static int ov2680_s_ctrl(struct v4l2_ctrl *ctrl)
 
 	return -EINVAL;
 }
+
+static int ov2680_register(struct v4l2_subdev *sd)
+{
+	struct ov2680_device *ov2680 = to_ov2680_dev(sd);
+	
+	dev_info(&ov2680->client->dev, "%s called and registered subdev %s.\n", __func__, sd->name);
+	return 0;
+}
+
+static int ov2680_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+{
+	struct ov2680_device *ov2680 = to_ov2680_dev(sd);
+	
+	dev_info(&ov2680->client->dev, "%s was called.\n", __func__);
+
+	struct v4l2_mbus_framefmt *try_fmt =
+				v4l2_subdev_get_try_format(sd, fh->pad, 0);
+
+	mutex_lock(&ov2680->lock);
+
+	/* Initialize try_fmt */
+	try_fmt->width = ov2680->current_mode->width;
+	try_fmt->height = ov2680->current_mode->height;
+	try_fmt->code = MEDIA_BUS_FMT_SGRBG10_1X10;
+	try_fmt->field = V4L2_FIELD_NONE;
+
+	dev_info(&ov2680->client->dev, "    frame size: %dx%d.\n", try_fmt->width, try_fmt->height);
+
+	mutex_unlock(&ov2680->lock);
+	return 0;
+}
+
+static const struct v4l2_subdev_internal_ops ov2680_internal_ops = {
+	.registered		= ov2680_register,
+	.open			= ov2680_open,
+};
 
 static const struct v4l2_ctrl_ops ov2680_ctrl_ops = {
 	.g_volatile_ctrl = ov2680_g_volatile_ctrl,
@@ -963,6 +1089,7 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 	sensor->sd.entity.ops = &ov2680_subdev_entity_ops;
 	sensor->sd.fwnode = sensor->client->dev.fwnode;
+	sensor->sd.internal_ops = &ov2680_internal_ops;
 
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
 	if (ret < 0)
@@ -1017,16 +1144,6 @@ cleanup_entity:
 
 	return ret;
 }
-
-static int ov2680_register(struct v4l2_subdev *sd)
-{
-	printk(KERN_CRIT "Registered subdev %s\n", sd->name);
-	return 0;
-}
-
-static const struct v4l2_subdev_internal_ops ov2680_internal_ops = {
-	.registered		= ov2680_register,
-};
 
 static int ov2680_remove(struct i2c_client *client)
 {
@@ -1142,7 +1259,7 @@ static int ov2680_probe(struct i2c_client *client)
 	}
 
 	/* Shut down till we're needed */
-	ov2680_power_off(ov2680);
+	/* ov2680_power_off(ov2680); */
 
     return 0;
 

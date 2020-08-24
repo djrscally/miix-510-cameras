@@ -1,4 +1,4 @@
-#define OV2680_XVCLK_VALUE			24000000
+#define OV2680_clk_VALUE			24000000
 
 #define OV2680_ID_REG_HIGH          0x300a
 #define OV2680_ID_REG_LOW           0x300b
@@ -111,8 +111,8 @@ struct ov2680_device {
     struct i2c_client       		*client;			/* client for this physical device */
 	struct device					*pmic_dev;			/* physical device for the sensor's PMIC */
 	struct v4l2_subdev				sd;
-	struct clk						*xvclk;
-	u32								xvclk_freq;
+	struct clk						*clk;
+	u32								clk_freq;
 	const struct ov2680_mode_info	*current_mode;
 
 	/* GPIO pins to turn on the PMIC */

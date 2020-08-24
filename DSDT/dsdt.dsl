@@ -38684,5 +38684,5 @@ DefinitionBlock ("", "DSDT", 2, "LENOVO", "CB-01   ", 0x00000002)
     }
 
     /* Include the camera mods */
-    #include "cameras.dsl"
+    /* #include "cameras.dsl"  */
 }
