@@ -53,8 +53,6 @@ static int ov2680_read_reg(struct i2c_client *client, u16 data_length, u16 reg, 
 
 	memset(msg, 0 , sizeof(msg));
 
-     printk(KERN_CRIT "ov2680: reading from addr 0x%02x, reg 0x%04x", client->addr, reg);
-
 	msg[0].addr = client->addr;
 	msg[0].flags = 0;
 	msg[0].len = I2C_MSG_LENGTH;
@@ -87,6 +85,8 @@ static int ov2680_read_reg(struct i2c_client *client, u16 data_length, u16 reg, 
 	else
 		*val = be32_to_cpu(*(u32 *)&data[0]);
 
+	dev_info(&client->dev, "    read val 0x%06x from reg 0x%04x\n", val, reg);
+
 	return 0;
 }
 
@@ -95,8 +95,6 @@ static int ov2680_i2c_write(struct i2c_client *client, u16 len, u8 *data)
 	struct i2c_msg msg;
 	const int num_msg = 1;
 	int ret;
-
-	dev_info (&client->dev, "%s was called.\n", __func__);
 
 	msg.addr = client->addr;
 	msg.flags = 0;
@@ -116,8 +114,9 @@ static int ov2680_write_reg(struct i2c_client *client, u16 data_length,
 	const u16 len = data_length + sizeof(u16); /* 16-bit address + data */
 
 	dev_info (&client->dev, "%s was called.\n", __func__);
+	dev_info(&client->dev, "    Writing val 0x%04x to reg 0x%04x\n", val, reg);
 
-	if (data_length != OV2680_8BIT && data_length != OV2680_16BIT) {
+	if (data_length != OV2680_8BIT && data_length != OV2680_16BIT && data_length != OV2680_24BIT) {
 		dev_err(&client->dev,
 			"%s error, invalid data_length\n", __func__);
 		return -EINVAL;
@@ -170,6 +169,7 @@ static int ov2680_load_regs(struct ov2680_device *sensor, const struct ov2680_mo
 	u16 val;
 
 	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+	dev_info(&sensor->client->dev, "    for mode %s\n", mode->name);
 
 	for (i = 0; i < mode->reg_data_size; ++i, ++regs) {
 		reg_addr = regs->reg_addr;
@@ -217,10 +217,7 @@ static int ov2680_check_ov2680_id(struct i2c_client *client)
 					OV2680_SC_CMMN_SUB_ID, &high);
 	revision = (u8) high & 0x0f;
 
-	printk(KERN_CRIT, "ov2680: ov2680 revision=0x%x\n", revision);
-	printk(KERN_CRIT "detect ov2680 success\n");
-	dev_dbg(&client->dev, "ov2680_revision = 0x%x\n", revision);
-	dev_dbg(&client->dev, "detect ov2680 success\n");
+	dev_info(&client->dev, "detect ov2680 success\n");
 
 	return 0;
 }
@@ -501,25 +498,36 @@ static int ov2680_test_pattern_set(struct ov2680_device *sensor, int value)
 	return 0;
 }
 
-static int ov2680_gain_set(struct ov2680_device *sensor, bool auto_gain)
+static int ov2680_update_digital_gain(struct i2c_client *client, u32 d_gain)
+{
+	int ret;
+
+	dev_info(&client->dev, "%s was called.\n", __func__);
+
+	ret = ov2680_write_reg(client, OV2680_16BIT, OV2680_REG_R_DGTL_GAIN, d_gain);
+	if (ret)
+		return ret;
+
+	ret = ov2680_write_reg(client, OV2680_16BIT, OV2680_REG_G_DGTL_GAIN, d_gain);
+	if (ret)
+		return ret;
+
+	ret = ov2680_write_reg(client, OV2680_16BIT, OV2680_REG_B_DGTL_GAIN, d_gain);
+
+	return ret;
+}
+
+static int ov2680_update_analog_gain(struct ov2680_device *sensor)
 {
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	u16 gain;
 	int ret;
 
-	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
+	dev_info(&sensor->client->dev, "%s was called.\n", __func__);
 
-	ret = ov2680_mod_reg(sensor, OV2680_REG_R_MANUAL, BIT(1),
-			     auto_gain ? 0 : BIT(1));
-	if (ret < 0)
-		return ret;
+	gain = ctrls->again->val;
 
-	if (auto_gain || !ctrls->gain->is_new)
-		return 0;
-
-	gain = ctrls->gain->val;
-
-	ret = ov2680_write_reg(sensor->client, 2, OV2680_REG_GAIN_PK, gain);
+	ret = ov2680_write_reg(sensor->client, OV2680_16BIT, OV2680_REG_GAIN_PK, gain);
 
 	return 0;
 }
@@ -539,21 +547,13 @@ static int ov2680_gain_get(struct ov2680_device *sensor)
 }
 
 
-static int ov2680_exposure_set(struct ov2680_device *sensor, bool auto_exp)
+static int ov2680_exposure_set(struct ov2680_device *sensor)
 {
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	u32 exp;
 	int ret;
 
 	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
-
-	ret = ov2680_mod_reg(sensor, OV2680_REG_R_MANUAL, BIT(0),
-			     auto_exp ? 0 : BIT(0));
-	if (ret < 0)
-		return ret;
-
-	if (auto_exp || !ctrls->exposure->is_new)
-		return 0;
 
 	exp = (u32)ctrls->exposure->val;
 	exp <<= 4;
@@ -599,29 +599,17 @@ static int ov2680_mode_set(struct ov2680_device *sensor)
 
 	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
-	ret = ov2680_gain_set(sensor, false);
+	ret = ov2680_update_analog_gain(sensor);
 	if (ret < 0)
 		return ret;
 
-	ret = ov2680_exposure_set(sensor, false);
+	ret = ov2680_exposure_set(sensor);
 	if (ret < 0)
 		return ret;
 
 	ret = ov2680_load_regs(sensor, sensor->current_mode);
 	if (ret < 0)
 		return ret;
-
-	if (ctrls->auto_gain->val) {
-		ret = ov2680_gain_set(sensor, true);
-		if (ret < 0)
-			return ret;
-	}
-
-	if (ctrls->auto_exp->val == V4L2_EXPOSURE_AUTO) {
-		ret = ov2680_exposure_set(sensor, true);
-		if (ret < 0)
-			return ret;
-	}
 
 	sensor->mode_pending_changes = false;
 
@@ -739,10 +727,13 @@ static int ov2680_enum_mbus_code(struct v4l2_subdev *sd,
 
 	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
+
 	if (code->pad != 0 || code->index != 0)
 		return -EINVAL;
 
 	code->code = sensor->fmt.code;
+
+	dev_info(&sensor->client->dev, "    code set to %d\n", code->code);
 
 	return 0;
 }
@@ -850,8 +841,8 @@ static int ov2680_init_cfg(struct v4l2_subdev *sd,
 		.which = cfg ? V4L2_SUBDEV_FORMAT_TRY
 				: V4L2_SUBDEV_FORMAT_ACTIVE,
 		.format = {
-			.width = 800,
-			.height = 600,
+			.width = 1600,
+			.height = 1200,
 		}
 	};
 
@@ -950,14 +941,12 @@ static int ov2680_s_ctrl(struct v4l2_ctrl *ctrl)
 		return 0;
 
 	switch (ctrl->id) {
-	case V4L2_CID_AUTOGAIN:
-		return ov2680_gain_set(sensor, !!ctrl->val);
-	case V4L2_CID_GAIN:
-		return ov2680_gain_set(sensor, !!ctrls->auto_gain->val);
-	case V4L2_CID_EXPOSURE_AUTO:
-		return ov2680_exposure_set(sensor, !!ctrl->val);
+	case V4L2_CID_ANALOGUE_GAIN:
+		return ov2680_update_analog_gain(sensor);
+	case V4L2_CID_DIGITAL_GAIN:
+		return ov2680_update_digital_gain(sensor->client, ctrl->val);
 	case V4L2_CID_EXPOSURE:
-		return ov2680_exposure_set(sensor, !!ctrls->auto_exp->val);
+		return ov2680_exposure_set(sensor);
 	case V4L2_CID_VFLIP:
 		if (sensor->is_streaming)
 			return -EBUSY;
@@ -989,32 +978,8 @@ static int ov2680_register(struct v4l2_subdev *sd)
 	return 0;
 }
 
-static int ov2680_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
-{
-	struct ov2680_device *ov2680 = to_ov2680_dev(sd);
-	
-	dev_info(&ov2680->client->dev, "%s was called.\n", __func__);
-
-	struct v4l2_mbus_framefmt *try_fmt =
-				v4l2_subdev_get_try_format(sd, fh->pad, 0);
-
-	mutex_lock(&ov2680->lock);
-
-	/* Initialize try_fmt */
-	try_fmt->width = ov2680->current_mode->width;
-	try_fmt->height = ov2680->current_mode->height;
-	try_fmt->code = MEDIA_BUS_FMT_SGRBG10_1X10;
-	try_fmt->field = V4L2_FIELD_NONE;
-
-	dev_info(&ov2680->client->dev, "    frame size: %dx%d.\n", try_fmt->width, try_fmt->height);
-
-	mutex_unlock(&ov2680->lock);
-	return 0;
-}
-
 static const struct v4l2_subdev_internal_ops ov2680_internal_ops = {
 	.registered		= ov2680_register,
-	.open			= ov2680_open,
 };
 
 static const struct v4l2_ctrl_ops ov2680_ctrl_ops = {
@@ -1051,17 +1016,20 @@ static int ov2680_mode_init(struct ov2680_device *sensor)
 {
 	const struct ov2680_mode_info *init_mode;
 
+	dev_info(&sensor->client->dev, "%s was called\n", __func__);
+
 	/* set initial mode */
 	sensor->fmt.code = MEDIA_BUS_FMT_SBGGR10_1X10;
-	sensor->fmt.width = 800;
-	sensor->fmt.height = 600;
+	sensor->fmt.width = 1600;
+	sensor->fmt.height = 1200;
 	sensor->fmt.field = V4L2_FIELD_NONE;
-	sensor->fmt.colorspace = V4L2_COLORSPACE_SRGB;
+	sensor->fmt.colorspace = V4L2_COLORSPACE_RAW; /* SRGB; */
 
 	sensor->frame_interval.denominator = OV2680_FRAME_RATE;
 	sensor->frame_interval.numerator = 1;
 
-	init_mode = &ov2680_mode_init_data;
+	/* Default to max resolution mode */
+	init_mode = &ov2680_mode_data[2];
 
 	sensor->current_mode = init_mode;
 
@@ -1080,6 +1048,8 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	struct v4l2_ctrl_handler *hdl = &ctrls->handler;
 	int ret = 0;
+
+	dev_info(&sensor->client->dev, "%s was called\n", __func__);
 
 	v4l2_i2c_subdev_init(&sensor->sd, sensor->client,
 			     &ov2680_subdev_ops);
@@ -1100,7 +1070,7 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	hdl->lock = &sensor->lock;
 
 	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ, 0, 0, link_freq_menu_items);
-	
+
 	if (ctrls->link_freq) {
 		ctrls->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	}
@@ -1113,35 +1083,31 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 					ARRAY_SIZE(test_pattern_menu) - 1,
 					0, 0, test_pattern_menu);
 
-	ctrls->auto_exp = v4l2_ctrl_new_std_menu(hdl, ops,
-						 V4L2_CID_EXPOSURE_AUTO,
-						 V4L2_EXPOSURE_MANUAL, 0,
-						 V4L2_EXPOSURE_AUTO);
-
 	ctrls->exposure = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE,
 					    0, 32767, 1, 0);
+					
+	ctrls->again = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN,
+			  ANALOG_GAIN_MIN, ANALOG_GAIN_MAX, ANALOG_GAIN_STEP,
+			  ANALOG_GAIN_DEFAULT);
 
-	ctrls->auto_gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_AUTOGAIN,
-					     0, 1, 1, 1);
-	ctrls->gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_GAIN, 0, 2047, 1, 0);
+	/* Digital gain */
+	ctrls->dgain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN,
+			  OV2680_DGTL_GAIN_MIN, OV2680_DGTL_GAIN_MAX,
+			  OV2680_DGTL_GAIN_STEP, OV2680_DGTL_GAIN_DEFAULT);
 
 	if (hdl->error) {
 		ret = hdl->error;
 		goto cleanup_entity;
 	}
 
-	ctrls->gain->flags |= V4L2_CTRL_FLAG_VOLATILE;
 	ctrls->exposure->flags |= V4L2_CTRL_FLAG_VOLATILE;
-
-	v4l2_ctrl_auto_cluster(2, &ctrls->auto_gain, 0, true);
-	v4l2_ctrl_auto_cluster(2, &ctrls->auto_exp, 1, true);
 
 	sensor->sd.ctrl_handler = hdl;
 
 	ret = v4l2_async_register_subdev(&sensor->sd);
 	if (ret < 0)
 		goto cleanup_entity;
-
+		
 	return 0;
 
 cleanup_entity:
@@ -1212,7 +1178,7 @@ static int ov2680_probe(struct i2c_client *client)
 		goto remove_out;
 	}
 
-	/* Configure the power regulators */
+	/* Configure the power regulators  */
 	ret = ov2680_configure_regulators(ov2680);
 
 	if (ret) {
@@ -1234,7 +1200,7 @@ static int ov2680_probe(struct i2c_client *client)
 	if (ret) {
 		dev_err(&client->dev, "Could not power on the ov2680.\n");
 		goto remove_out;
-	}
+	} 
 
 	/* Check that we are in fact an ov2680 device */
     ret = ov2680_check_ov2680_id(client);

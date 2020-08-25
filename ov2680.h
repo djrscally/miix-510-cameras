@@ -32,6 +32,20 @@
 #define OV2680_WIDTH_MAX		1600
 #define OV2680_HEIGHT_MAX		1200
 
+#define	ANALOG_GAIN_MIN			0
+#define	ANALOG_GAIN_MAX			4095
+#define	ANALOG_GAIN_STEP		1
+#define	ANALOG_GAIN_DEFAULT		400
+
+/* Digital gain controls from sensor */
+#define OV2680_REG_R_DGTL_GAIN		0x5004
+#define OV2680_REG_G_DGTL_GAIN		0x5006
+#define OV2680_REG_B_DGTL_GAIN		0x5008
+#define OV2680_DGTL_GAIN_MIN		0
+#define OV2680_DGTL_GAIN_MAX		4095
+#define OV2680_DGTL_GAIN_STEP		1
+#define OV2680_DGTL_GAIN_DEFAULT	1024
+
 enum ov2680_mode_id {
 	OV2680_MODE_QUXGA_800_600,
 	OV2680_MODE_720P_1280_720,
@@ -102,6 +116,7 @@ static const char * const ov2680_supply_names[] = {
 enum ov2680_tok_type {
 	OV2680_8BIT  = 0x0001,
 	OV2680_16BIT = 0x0002,
+	OV2680_24BIT = 0x0003,
 	OV2680_32BIT = 0x0004,
 	OV2680_TOK_TERM   = 0xf000,	/* terminating token for reg list */
 	OV2680_TOK_DELAY  = 0xfe00,	/* delay token for reg list */
@@ -126,12 +141,13 @@ struct ov2680_mode_info {
 struct ov2680_ctrls {
 	struct v4l2_ctrl_handler handler;
 	struct {
-		struct v4l2_ctrl *auto_exp;
+/*		struct v4l2_ctrl *auto_exp; */
 		struct v4l2_ctrl *exposure;
 	};
 	struct {
-		struct v4l2_ctrl *auto_gain;
+		struct v4l2_ctrl *dgain;
 		struct v4l2_ctrl *gain;
+		struct v4l2_ctrl *again;
 	};
 
 	struct v4l2_ctrl *hflip;
@@ -215,12 +231,22 @@ static const struct reg_value ov2680_setting_30fps_720P_1280_720[] = {
 	{0x3815, 0x11}, {0x3820, 0xc0}, {0x4008, 0x00},
 };
 
-static const struct reg_value ov2680_setting_30fps_UXGA_1600_1200[] = {
+/*static const struct reg_value ov2680_setting_30fps_UXGA_1600_1200[] = {
 	{0x3086, 0x00}, {0x3501, 0x4e}, {0x3502, 0xe0}, {0x3808, 0x06},
 	{0x3809, 0x40}, {0x380a, 0x04}, {0x380b, 0xb0}, {0x380c, 0x06},
-	{0x380d, 0xa8}, {0x380e, 0x05}, {0x380f, 0x0e}, {0x3811, 0x00},
+	{0x380d, 0xa4}, {0x380e, 0x05}, {0x380f, 0x0e}, {0x3811, 0x00},
 	{0x3813, 0x00}, {0x3814, 0x11}, {0x3815, 0x11}, {0x3820, 0xc0},
-	{0x4008, 0x00}, {0x4837, 0x18}
+	{0x4008, 0x00}, {0x4837, 0x18}, {0x5004, 0x05}, {0x5008, 0x05}
+};*/
+
+static const struct reg_value ov2680_setting_30fps_UXGA_1600_1200[] = {
+	{0x3086, 0x00}, {0x3500, 0x02}, {0x3501, 0x4e}, {0x3502, 0xe0}, {0x3808, 0x06},
+	{0x3809, 0x40}, {0x380a, 0x04}, {0x380b, 0xb0}, {0x380c, 0x06},
+	{0x380d, 0xa4}, {0x380e, 0x05}, {0x380f, 0x0e}, {0x3811, 0x00},
+	{0x3813, 0x00}, {0x3814, 0x11}, {0x3815, 0x11}, {0x3820, 0xc0},
+	{0x4008, 0x00}, {0x4837, 0x18}, 
+	{0x5004, 0x08}, {0x5005, 0x00}, {0x5006, 0x04}, {0x5007, 0x00},
+	{0x5008, 0x08} , {0x5009, 0x00}, {0x4001, 0x10}
 };
 
 static const struct ov2680_mode_info ov2680_mode_init_data = {
