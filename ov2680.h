@@ -46,6 +46,11 @@
 #define OV2680_DGTL_GAIN_STEP		1
 #define OV2680_DGTL_GAIN_DEFAULT	1024
 
+/* vertical-timings from sensor */
+#define OV2680_REG_VTS			0x380e
+#define OV2680_VTS_30FPS		0x0808 /* default for 30 fps */
+#define OV2680_VTS_MAX			0xffff
+
 enum ov2680_mode_id {
 	OV2680_MODE_QUXGA_800_600,
 	OV2680_MODE_720P_1280_720,
@@ -135,7 +140,9 @@ struct ov2680_mode_info {
 	u32 width;
 	u32 height;
 	const struct reg_value *reg_data;
-	u32 reg_data_size;
+	u32 reg_data_size;	
+	u32 vts_min; /* minimum vertical timing size */
+	u32 vts_def; /* default vertical timing size */
 };
 
 struct ov2680_ctrls {
@@ -154,6 +161,9 @@ struct ov2680_ctrls {
 	struct v4l2_ctrl *vflip;
 	struct v4l2_ctrl *test_pattern;
 	struct v4l2_ctrl *link_freq;
+	struct v4l2_ctrl *pixel_rate;
+	struct v4l2_ctrl *vblank;
+	struct v4l2_ctrl *hblank;
 };
 
 /* GPIO Mapping for the camera */
@@ -249,20 +259,16 @@ static const struct reg_value ov2680_setting_30fps_UXGA_1600_1200[] = {
 	{0x5008, 0x08} , {0x5009, 0x00}, {0x4001, 0x10}
 };
 
-static const struct ov2680_mode_info ov2680_mode_init_data = {
-	"mode_quxga_800_600", OV2680_MODE_QUXGA_800_600, 800, 600,
-	ov2680_setting_30fps_QUXGA_800_600,
-	ARRAY_SIZE(ov2680_setting_30fps_QUXGA_800_600),
-};
+
 
 static const struct ov2680_mode_info ov2680_mode_data[OV2680_MODE_MAX] = {
 	{"mode_quxga_800_600", OV2680_MODE_QUXGA_800_600,
 	 800, 600, ov2680_setting_30fps_QUXGA_800_600,
-	 ARRAY_SIZE(ov2680_setting_30fps_QUXGA_800_600)},
+	 ARRAY_SIZE(ov2680_setting_30fps_QUXGA_800_600), OV2680_VTS_30FPS, OV2680_VTS_30FPS},
 	{"mode_720p_1280_720", OV2680_MODE_720P_1280_720,
 	 1280, 720, ov2680_setting_30fps_720P_1280_720,
-	 ARRAY_SIZE(ov2680_setting_30fps_720P_1280_720)},
+	 ARRAY_SIZE(ov2680_setting_30fps_720P_1280_720), OV2680_VTS_30FPS, OV2680_VTS_30FPS},
 	{"mode_uxga_1600_1200", OV2680_MODE_UXGA_1600_1200,
 	 1600, 1200, ov2680_setting_30fps_UXGA_1600_1200,
-	 ARRAY_SIZE(ov2680_setting_30fps_UXGA_1600_1200)},
+	 ARRAY_SIZE(ov2680_setting_30fps_UXGA_1600_1200), OV2680_VTS_30FPS, OV2680_VTS_30FPS},
 };

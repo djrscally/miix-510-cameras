@@ -206,8 +206,6 @@ static int ov2680_check_ov2680_id(struct i2c_client *client)
 					OV2680_ID_REG_LOW, &low);
 	id = ((((u16) high) << 8) | (u16) low);
 
-     printk(KERN_CRIT "ov2680: Chip ID Fetched = 0x%04x", id);
-
 	if (id != OV2680_ID) {
 		dev_err(&client->dev, "ov2680 ID error 0x%x\n", id);
 		return -ENODEV;
@@ -217,7 +215,7 @@ static int ov2680_check_ov2680_id(struct i2c_client *client)
 					OV2680_SC_CMMN_SUB_ID, &high);
 	revision = (u8) high & 0x0f;
 
-	dev_info(&client->dev, "detect ov2680 success\n");
+	dev_info(&client->dev, "ov2680 successfully detected\n");
 
 	return 0;
 }
@@ -622,7 +620,7 @@ static int ov2680_mode_restore(struct ov2680_device *sensor)
 
 	dev_info (&sensor->client->dev, "%s was called.\n", __func__);
 
-	ret = ov2680_load_regs(sensor, &ov2680_mode_init_data);
+	ret = ov2680_load_regs(sensor, &ov2680_mode_data[2]);
 	if (ret < 0)
 		return ret;
 
@@ -1048,6 +1046,9 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	struct ov2680_ctrls *ctrls = &sensor->ctrls;
 	struct v4l2_ctrl_handler *hdl = &ctrls->handler;
 	int ret = 0;
+	s64 vblank_max;
+	s64 vblank_def;
+	s64 vblank_min;
 
 	dev_info(&sensor->client->dev, "%s was called\n", __func__);
 
@@ -1059,7 +1060,7 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 	sensor->sd.entity.ops = &ov2680_subdev_entity_ops;
 	sensor->sd.fwnode = sensor->client->dev.fwnode;
-	sensor->sd.internal_ops = &ov2680_internal_ops;
+	sensor->sd.internal_ops = &ov2680_internal_ops;	
 
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
 	if (ret < 0)
@@ -1069,11 +1070,51 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 
 	hdl->lock = &sensor->lock;
 
-	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ, 0, 0, link_freq_menu_items);
+	if (hdl->error) {
+		dev_err(&sensor->client->dev, "Error before it all\n");
+	}
 
+	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ, 0, 0, link_freq_menu_items);
 	if (ctrls->link_freq) {
 		ctrls->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	}
+
+	if (hdl->error) {
+		dev_err(&sensor->client->dev, "Error after link_freq\n");
+	}
+
+	ctrls->pixel_rate = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_PIXEL_RATE, 0, link_freq_configs[0].pixel_rate, 1, link_freq_configs[0].pixel_rate);
+	if (ctrls->pixel_rate) {
+		ctrls->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	}
+	
+	if (hdl->error) {
+		dev_err(&sensor->client->dev, "Error after pixel_rate\n");
+	}
+
+	vblank_max = OV2680_VTS_MAX - sensor->current_mode->height;
+	vblank_def = sensor->current_mode->vts_def - sensor->current_mode->height;
+	vblank_min = sensor->current_mode->vts_min - sensor->current_mode->height;
+	ctrls->vblank = v4l2_ctrl_new_std(hdl, ops,
+					   V4L2_CID_VBLANK, vblank_min,
+					   vblank_max, 1, vblank_def);
+
+	if (hdl->error) {
+		dev_err(&sensor->client->dev, "Error after vblank\n");
+	}
+
+	ctrls->hblank = v4l2_ctrl_new_std(
+				hdl, ops, V4L2_CID_HBLANK,
+				2724 - sensor->current_mode->width,
+				2724 - sensor->current_mode->width, 1,
+				2724 - sensor->current_mode->width);
+	if (ctrls->hblank)
+		ctrls->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;	
+
+	if (hdl->error) {
+		dev_err(&sensor->client->dev, "Error after hblank\n");
+	}
+
 
 	ctrls->vflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
 	ctrls->hflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
@@ -1107,7 +1148,7 @@ static int ov2680_v4l2_register(struct ov2680_device *sensor)
 	ret = v4l2_async_register_subdev(&sensor->sd);
 	if (ret < 0)
 		goto cleanup_entity;
-		
+
 	return 0;
 
 cleanup_entity:
