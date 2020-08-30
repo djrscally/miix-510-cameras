@@ -18,6 +18,9 @@
 #define CIO2_HID                     "INT343E"
 #define CIO2_PCI_ID                     0x9d32
 
+#define ENDPOINT_SENSOR                      0
+#define ENDPOINT_CIO2                        1
+
 #define NODE_HID(_HID)                       \
     (const struct software_node) {           \
         _HID,                                \
@@ -244,12 +247,12 @@ static int connect_supported_devices(struct device *dev, void *data)
             sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency", ssdb.mclkspeed);
             sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
             sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
-            sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", dlanes, (int)ssdb.lanes);
-            sensor_props[4] = remote_endpoints[0]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_CIO2_ENDPOINT]);
+            sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
+            sensor_props[4] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_SENSOR]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_CIO2_ENDPOINT]);
             sensor_props[5] = PROPERTY_ENTRY_NULL;
 
-            cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", dlanes, (int)ssdb.lanes);
-            cio2_props[1] = remote_endpoints[1]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_SENSOR_ENDPOINT]);
+            cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
+            cio2_props[1] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_CIO2]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_SENSOR_ENDPOINT]);
             cio2_props[2] = PROPERTY_ENTRY_NULL;
 
             /* build the software nodes */
