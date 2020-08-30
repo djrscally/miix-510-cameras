@@ -388,7 +388,6 @@ static void surface_camera_exit(void)
 module_init(surface_camera_init);
 module_exit(surface_camera_exit);
 
-MODULE_AUTHOR("Jordan Hand"); /* Primary author */
-MODULE_AUTHOR("Dan Scally <djrscally@gmail.com>"); /* Revisions to autodiscover link data from DSDT */
 MODULE_DESCRIPTION("A bridge driver to connect sensors to CIO2 infrastructure.");
 MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("acpi*:INT343E:*");
