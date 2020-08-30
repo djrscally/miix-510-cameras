@@ -7,7 +7,7 @@
 #include <linux/pci.h>
 #include <media/v4l2-subdev.h>
 
-#define MAX_CONNECTED_DEVICES                5
+#define MAX_CONNECTED_DEVICES                4
 #define SWNODE_SENSOR_HID                    0
 #define SWNODE_SENSOR_PORT                   1
 #define SWNODE_SENSOR_ENDPOINT               2
@@ -87,8 +87,14 @@ struct connected_devices connected_devs = {
 };
 
 static const struct property_entry remote_endpoints[] = {
-	PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),    /* Sensor 0, Sensor Property */
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),    /* Sensor 0, Sensor Property */
     PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[0].swnodes[SWNODE_SENSOR_ENDPOINT]),    /* Sensor 0, CIO2 Property */
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[1].swnodes[SWNODE_CIO2_ENDPOINT]),    
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[1].swnodes[SWNODE_SENSOR_ENDPOINT]),  
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[2].swnodes[SWNODE_CIO2_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[2].swnodes[SWNODE_SENSOR_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[3].swnodes[SWNODE_CIO2_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint", &connected_devs.sensors[3].swnodes[SWNODE_SENSOR_ENDPOINT]),
 	{ }
 };
 
@@ -242,17 +248,15 @@ static int connect_supported_devices(struct device *dev, void *data)
                 data_lanes[j] = (u32)j+1;
             }
 
-            u32 dlanes[1] = {1};
-
             sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency", ssdb.mclkspeed);
             sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
             sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
             sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
-            sensor_props[4] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_SENSOR]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_CIO2_ENDPOINT]);
+            sensor_props[4] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_SENSOR];
             sensor_props[5] = PROPERTY_ENTRY_NULL;
 
             cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
-            cio2_props[1] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_CIO2]; //PROPERTY_ENTRY_REF("remote-endpoint", &nodes[SWNODE_SENSOR_ENDPOINT]);
+            cio2_props[1] = remote_endpoints[(cdevs->n_devices * 2) + ENDPOINT_CIO2];
             cio2_props[2] = PROPERTY_ENTRY_NULL;
 
             /* build the software nodes */
@@ -271,29 +275,19 @@ static int connect_supported_devices(struct device *dev, void *data)
                 return 0;
             }
 
-            pr_info("Past registration\n");
-
             fwnode = software_node_fwnode(&nodes[SWNODE_SENSOR_HID]);
             if (!fwnode) {
                 dev_err(dev, "Failed to get fwnode from software node for %s\n", supported_devices[i]);
                 return 0;
             }
 
-            pr_info("Past firmware fetch\n");
-
             fwnode->secondary = ERR_PTR(-ENODEV);
-            pr_info("1\n");
             dev->fwnode = fwnode;
-            pr_info("2\n");
             ((struct v4l2_subdev *)dev->driver_data)->fwnode = fwnode;
-
-            pr_info("Assigning gubbins\n");
 
             /* we're done */
             cdevs->sensors[cdevs->n_devices].client = client;
             cdevs->n_devices++;
-
-            pr_info("Done and returning\n");
 
             return 0;
         }
@@ -359,8 +353,6 @@ static int surface_camera_init(void)
         goto out;
     }
 
-    pr_info("got the pci dev\n");
-
     fwnode = software_node_fwnode(&cio2_hid_node);
     if (!fwnode) {
         pr_err("Error getting fwnode from cio2 software_node\n");
@@ -368,12 +360,8 @@ static int surface_camera_init(void)
         goto out;
     }
 
-    pr_info("got the firmware node\n");
-
     fwnode->secondary = ERR_PTR(-ENODEV);
     cio2->dev.fwnode = fwnode;
-
-    pr_info("did the assignments\n");
 
     ret = device_reprobe(&cio2->dev);
     if (ret) {
@@ -381,7 +369,6 @@ static int surface_camera_init(void)
         goto out;
     }
 
-    pr_info("I actually think success...\n");
 
     return 0;
 out:
