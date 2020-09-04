@@ -85,7 +85,7 @@ static int ov2680_read_reg(struct i2c_client *client, u16 data_length, u16 reg, 
 	else
 		*val = be32_to_cpu(*(u32 *)&data[0]);
 
-	dev_info(&client->dev, "    read val 0x%06x from reg 0x%04x\n", val, reg);
+	dev_info(&client->dev, "    read val 0x%06x from reg 0x%04x\n", *val, reg);
 
 	return 0;
 }
