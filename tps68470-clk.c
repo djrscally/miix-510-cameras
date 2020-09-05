@@ -276,7 +276,11 @@ static struct platform_driver tps68470_clk_driver = {
 };
 module_platform_driver(tps68470_clk_driver);
 
-
-MODULE_AUTHOR("Dan Scally <djrscally@protonmail.com");
-MODULE_DESCRIPTION("Clock driver for TI TPS68470 PMIC");
-MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("Zaikuo Wang <zaikuo.wang@intel.com>");
+MODULE_AUTHOR("Tianshu Qiu <tian.shu.qiu@intel.com>");
+MODULE_AUTHOR("Jian Xu Zheng <jian.xu.zheng@intel.com>");
+MODULE_AUTHOR("Yuning Pu <yuning.pu@intel.com>");
+MODULE_AUTHOR("Antti Laakso <antti.laakso@intel.com>");
+MODULE_DESCRIPTION("clock driver for TPS68470 pmic");
+MODULE_ALIAS("platform:tps68470-clk");
+MODULE_LICENSE("GPL");

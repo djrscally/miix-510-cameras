@@ -4,7 +4,7 @@ This repo will, once complete, hold drivers for the webcams for the Lenovo Miix 
 
 ### Ooh! Do they work?
 
-No, this is very much a work in progress. The 5648 driver isn't in a state worth committing yet. The 2680 driver will at least turn on the camera and read the sensor id on the chip to confirm it's working correctly, but you can't get an image yet.
+Sort of. With the surface_camera driver and the ov2680 driver loaded, you can take a (very bad) image. The ov5648 driver doesn't work at all yet. There's still a lot to do on these drivers, and subsequently a lot to do with libcamera to get them working in a useful way.
 
 ### Why was this so difficult?
 

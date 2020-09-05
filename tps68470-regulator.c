@@ -197,5 +197,4 @@ MODULE_AUTHOR("Jian Xu Zheng <jian.xu.zheng@intel.com>");
 MODULE_AUTHOR("Yuning Pu <yuning.pu@intel.com>");
 MODULE_AUTHOR("Rajmohan Mani <rajmohan.mani@intel.com>");
 MODULE_DESCRIPTION("TPS68470 voltage regulator driver");
-MODULE_AUTHOR("Daniel Scally <djrscally@protonmail.com>");
 MODULE_LICENSE("GPL v2");
