@@ -348,7 +348,6 @@ static int surface_camera_init(void)
     fwnode->secondary = ERR_PTR(-ENODEV);
     set_primary_fwnode(&cio2->dev, fwnode);
 
-    pr_info("Reprobing now\n");
     ret = device_reprobe(&cio2->dev);
     if (ret) {
         dev_warn(&cio2->dev, "Reprobing error: %d\n", ret);
