@@ -76,8 +76,8 @@ struct pci_dev *cio2;
 struct software_node cio2_hid_node = { CIO2_HID, };
 
 struct sensor {
-    struct i2c_client *client;
-    struct software_node swnodes[7];
+    struct device *dev;
+    struct software_node swnodes[5];
     struct property_entry sensor_props[6];
     struct property_entry cio2_props[3];
     struct fwnode_handle *fwnode;
@@ -93,14 +93,22 @@ struct connected_devices cdevs = {
 };
 
 static const struct property_entry remote_endpoints[] = {
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),    /* Sensor 0, Sensor Property */
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[0].swnodes[SWNODE_SENSOR_ENDPOINT]),    /* Sensor 0, CIO2 Property */
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[1].swnodes[SWNODE_CIO2_ENDPOINT]),    
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[1].swnodes[SWNODE_SENSOR_ENDPOINT]),  
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[2].swnodes[SWNODE_CIO2_ENDPOINT]),
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[2].swnodes[SWNODE_SENSOR_ENDPOINT]),
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[3].swnodes[SWNODE_CIO2_ENDPOINT]),
-    PROPERTY_ENTRY_REF("remote-endpoint", &cdevs.sensors[3].swnodes[SWNODE_SENSOR_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint", /* Sensor 0, Sensor Property */
+                        &cdevs.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint", /* Sensor 0, CIO2 Property */
+                        &cdevs.sensors[0].swnodes[SWNODE_SENSOR_ENDPOINT]),    
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[1].swnodes[SWNODE_CIO2_ENDPOINT]),    
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[1].swnodes[SWNODE_SENSOR_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[2].swnodes[SWNODE_CIO2_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[2].swnodes[SWNODE_SENSOR_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[3].swnodes[SWNODE_CIO2_ENDPOINT]),
+    PROPERTY_ENTRY_REF("remote-endpoint",
+                        &cdevs.sensors[3].swnodes[SWNODE_SENSOR_ENDPOINT]),
 	{ }
 };
 
@@ -184,11 +192,10 @@ err:
 }
 
 static int get_acpi_ssdb_sensor_data(struct device *dev,
-                     struct sensor_bios_data *sensor)
+                    struct sensor_bios_data *sensor)
 {
     struct sensor_bios_data_packed sensor_data;
-    int ret = read_acpi_block(dev, "SSDB", &sensor_data,
-                  sizeof(sensor_data));
+    int ret = read_acpi_block(dev, "SSDB", &sensor_data, sizeof(sensor_data));
     if (ret < 0) {
         dev_err(dev, "Failed to fetch SSDB data\n");
         return ret;
@@ -207,7 +214,6 @@ static int get_acpi_ssdb_sensor_data(struct device *dev,
 static int connect_supported_devices(void)
 {
     struct acpi_device *adev;
-    struct i2c_client *client;
     struct device *dev;
     struct sensor_bios_data ssdb;
     struct property_entry *sensor_props;
@@ -232,7 +238,8 @@ static int connect_supported_devices(void)
         }
 
         if (!dev->driver_data) {
-            pr_info("Found supported device %s, but it has no driver; skipping\n", supported_devices[i]);
+            pr_info("Found supported device %s, but it has no driver\n",
+                                supported_devices[i]);
             continue;
         } else {
             pr_info("Found supported device %s\n", supported_devices[i]);
@@ -250,7 +257,8 @@ static int connect_supported_devices(void)
         * this point unfortunately, so it will have to be dynamically
         * allocated. use devres to avoid snafu later
         */
-        data_lanes = devm_kmalloc(dev, sizeof(u32) * (int)ssdb.lanes, GFP_KERNEL);
+        data_lanes = devm_kmalloc(dev, sizeof(u32) * (int)ssdb.lanes,
+                            GFP_KERNEL);
 
         if (!data_lanes) {
             dev_err(dev, "Couldn't allocate memory for data lanes array\n");
@@ -261,21 +269,24 @@ static int connect_supported_devices(void)
             data_lanes[j] = (u32)j+1;
         }
 
-        sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency", ssdb.mclkspeed);
+        sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency",
+                            ssdb.mclkspeed);
         sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
         sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
-        sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
+        sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
+                            data_lanes, (int)ssdb.lanes);
         sensor_props[4] = remote_endpoints[(cdevs.n_devices * 2) + ENDPOINT_SENSOR];
         sensor_props[5] = PROPERTY_ENTRY_NULL;
 
-        cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes, (int)ssdb.lanes);
+        cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes,
+                            (int)ssdb.lanes);
         cio2_props[1] = remote_endpoints[(cdevs.n_devices * 2) + ENDPOINT_CIO2];
         cio2_props[2] = PROPERTY_ENTRY_NULL;
 
         /* build the software nodes */
 
         nodes[SWNODE_SENSOR_HID] = NODE_HID(supported_devices[i]);                                                /* Sensor HID Node */
-        nodes[SWNODE_SENSOR_PORT] = NODE_PORT("port0", &nodes[SWNODE_SENSOR_HID]);                                /* Sensor Port Node */
+        nodes[SWNODE_SENSOR_PORT] = NODE_PORT("port0",&nodes[SWNODE_SENSOR_HID]);                                /* Sensor Port Node */
         nodes[SWNODE_SENSOR_ENDPOINT] = NODE_ENDPOINT("endpoint0", &nodes[SWNODE_SENSOR_PORT], sensor_props);     /* Sensor Endpoint Node */
         nodes[SWNODE_CIO2_PORT] = NODE_PORT(port_names[(int)ssdb.link], &cio2_hid_node);                         /* CIO2 Port Node */
         nodes[SWNODE_CIO2_ENDPOINT] = NODE_ENDPOINT("endpoint0", &nodes[SWNODE_CIO2_PORT], cio2_props);           /* CIO2 Endpoint Node */
@@ -283,13 +294,15 @@ static int connect_supported_devices(void)
 
         ret = software_node_register_nodes(nodes);
         if (ret) {
-            dev_err(dev, "Failed to register the software nodes for %s\n", supported_devices[i]);
+            dev_err(dev, "Failed to register the software nodes for %s\n",
+                                supported_devices[i]);
             return 0;
         }
 
         fwnode = software_node_fwnode(&nodes[SWNODE_SENSOR_HID]);
         if (!fwnode) {
-            dev_err(dev, "Failed to get fwnode from software node for %s\n", supported_devices[i]);
+            dev_err(dev, "Failed to get fwnode from software node for %s\n",
+                                supported_devices[i]);
             return 0;
         }
 
@@ -298,7 +311,7 @@ static int connect_supported_devices(void)
         ((struct v4l2_subdev *)dev->driver_data)->fwnode = fwnode;
 
         /* we're done */
-        cdevs.sensors[cdevs.n_devices].client = client;
+        cdevs.sensors[cdevs.n_devices].dev = dev;
         cdevs.n_devices++;
 
     }
@@ -360,29 +373,33 @@ out:
     return ret;
 }
 
-static int surface_camera_unregister_nodes(void)
+static int surface_camera_unregister_sensors(void)
 {
     int i,j;
     struct sensor sensor;
     struct fwnode_handle *fwnode;
 
     for (i=0; i < cdevs.n_devices; i++) {
-        
+
         sensor = cdevs.sensors[i];
 
         for (j=4; j>=0; j--) {
+            
+            software_node_unregister(&sensor.swnodes[j]);
 
             fwnode = software_node_fwnode(&sensor.swnodes[j]);
-            
+
             if (!IS_ERR_OR_NULL(fwnode)) {
+
+                fwnode->secondary = NULL;
+
                 fwnode_handle_put(fwnode);
             }
 
-            software_node_unregister(&sensor.swnodes[j]);
         }
-    }
 
-    software_node_unregister(&cio2_hid_node);
+        put_device(sensor.dev);
+    }
 
     return 0;
 }
@@ -390,18 +407,31 @@ static int surface_camera_unregister_nodes(void)
 static void surface_camera_exit(void)
 {
     int ret;
+    struct fwnode_handle *fwnode;
 
     if (cio2) {
-
-        cio2->dev.fwnode = ERR_PTR(-ENODEV);
+        cio2->dev.fwnode->secondary = NULL;
+        fwnode_handle_put(cio2->dev.fwnode);
+        cio2->dev.fwnode = NULL;
     }
 
-    ret = surface_camera_unregister_nodes();
+    pci_dev_put(cio2);
+ 
+    ret = surface_camera_unregister_sensors();
 
     if (ret) {
-        pr_err("An error occurred unregistering the software nodes\n");
+        pr_err("An error occurred unregistering the sensors\n");
     }
-    pci_dev_put(cio2);
+
+    software_node_unregister(&cio2_hid_node);
+
+    fwnode = software_node_fwnode(&cio2_hid_node);
+
+    if (fwnode) {
+        fwnode->secondary = NULL;
+        fwnode_handle_put(fwnode);
+    }  
+
 }
 
 module_init(surface_camera_init);
