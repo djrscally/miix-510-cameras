@@ -1171,13 +1171,6 @@ static int ov2680_remove(struct i2c_client *client)
 		return -100;
 	}
 
-	ov2680_power_off(ov2680);
-
-	gpiod_put(ov2680->s_enable);
-	gpiod_put(ov2680->s_idle);
-	gpiod_put(ov2680->s_resetn);
-	gpiod_remove_lookup_table(ov2680->gpios);
-
 	v4l2_device_unregister_subdev(sd);
 
 	return 0;
@@ -1200,43 +1193,12 @@ static int ov2680_probe(struct i2c_client *client)
 	/* First, tie i2c_client to ov2680_device, and vice versa */
 	ov2680->client = client;
 
-	/* Next, set the GPIO lookup table so we can find the control pins from the PMIC */
-
-	ov2680->gpios = &ov2680_gpios;
-
-	/* Configure the GPIO pins */
-	ret = ov2680_configure_gpios(ov2680);
-
-	if (ret < 0) {
-		dev_dbg(&client->dev, "Unable to configure GPIO pins. Device initialisation failed.\n");
-		goto remove_out;
-	}
-
 	ret = ov2680_mode_init(ov2680);
 
 	if (ret) {
 		dev_err(&client->dev, "Failed to initialise mode.\n");
 		goto remove_out;
 	}
-
-	/* Configure the power regulators  */
-	ret = ov2680_configure_regulators(ov2680);
-
-	if (ret) {
-		dev_dbg(&client->dev, "Could not configure regulators.\n");
-		goto remove_out;
-	}
-
-	/* Configure the clock */
-	ret = ov2680_configure_clock(ov2680);
-
-	if (ret) {
-		dev_dbg(&client->dev, "Could not configure clock.\n");
-		goto remove_out;
-	}
-
-	/* Power up */
-	ret = ov2680_power_on(ov2680);
 
 	if (ret) {
 		dev_err(&client->dev, "Could not power on the ov2680.\n");

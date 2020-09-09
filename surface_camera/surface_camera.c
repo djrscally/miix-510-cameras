@@ -8,6 +8,7 @@
 #include <media/v4l2-subdev.h>
 
 #include <linux/fwnode.h>
+#include <linux/kref.h>
 
 #include "surface_camera.h"
 
@@ -71,8 +72,6 @@ const char *port_names[] = {
     "port5", "port6", "port7", "port8", "port9"
 };
 
-struct pci_dev *cio2;
-
 struct software_node cio2_hid_node = { CIO2_HID, };
 
 struct sensor {
@@ -83,32 +82,32 @@ struct sensor {
     struct fwnode_handle *fwnode;
 };
 
-struct connected_devices {
-    int n_devices;
+struct cio2_bridge {
+    int n_sensors;
     struct sensor sensors[MAX_CONNECTED_DEVICES];
+    struct pci_dev *cio2;
+    struct fwnode_handle *cio2_fwnode;
 };
 
-struct connected_devices cdevs = {
-    .n_devices = 0,
-};
+struct cio2_bridge bridge = { 0, };
 
 static const struct property_entry remote_endpoints[] = {
     PROPERTY_ENTRY_REF("remote-endpoint", /* Sensor 0, Sensor Property */
-                        &cdevs.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),
+                        &bridge.sensors[0].swnodes[SWNODE_CIO2_ENDPOINT]),
     PROPERTY_ENTRY_REF("remote-endpoint", /* Sensor 0, CIO2 Property */
-                        &cdevs.sensors[0].swnodes[SWNODE_SENSOR_ENDPOINT]),    
+                        &bridge.sensors[0].swnodes[SWNODE_SENSOR_ENDPOINT]),    
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[1].swnodes[SWNODE_CIO2_ENDPOINT]),    
+                        &bridge.sensors[1].swnodes[SWNODE_CIO2_ENDPOINT]),    
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[1].swnodes[SWNODE_SENSOR_ENDPOINT]),
+                        &bridge.sensors[1].swnodes[SWNODE_SENSOR_ENDPOINT]),
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[2].swnodes[SWNODE_CIO2_ENDPOINT]),
+                        &bridge.sensors[2].swnodes[SWNODE_CIO2_ENDPOINT]),
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[2].swnodes[SWNODE_SENSOR_ENDPOINT]),
+                        &bridge.sensors[2].swnodes[SWNODE_SENSOR_ENDPOINT]),
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[3].swnodes[SWNODE_CIO2_ENDPOINT]),
+                        &bridge.sensors[3].swnodes[SWNODE_CIO2_ENDPOINT]),
     PROPERTY_ENTRY_REF("remote-endpoint",
-                        &cdevs.sensors[3].swnodes[SWNODE_SENSOR_ENDPOINT]),
+                        &bridge.sensors[3].swnodes[SWNODE_SENSOR_ENDPOINT]),
 	{ }
 };
 
@@ -234,23 +233,28 @@ static int connect_supported_devices(void)
         dev = bus_find_device_by_acpi_dev(&i2c_bus_type, adev);
 
         if (!dev) {
+            pr_info("ACPI match for %s, but it has no i2c device\n",
+                                supported_devices[i]);
             continue;
         }
 
         if (!dev->driver_data) {
-            pr_info("Found supported device %s, but it has no driver\n",
+            pr_info("ACPI match for %s, but it has no driver\n",
                                 supported_devices[i]);
             continue;
         } else {
             pr_info("Found supported device %s\n", supported_devices[i]);
         }
 
+        /* Store sensor's existing fwnode */
+        bridge.sensors[bridge.n_sensors].fwnode = dev->fwnode;
+
         get_acpi_ssdb_sensor_data(dev, &ssdb);
 
-        nodes = cdevs.sensors[cdevs.n_devices].swnodes;
-        sensor_props = cdevs.sensors[cdevs.n_devices].sensor_props;
-        cio2_props = cdevs.sensors[cdevs.n_devices].cio2_props;
-        fwnode = cdevs.sensors[cdevs.n_devices].fwnode;
+        nodes = bridge.sensors[bridge.n_sensors].swnodes;
+        sensor_props = bridge.sensors[bridge.n_sensors].sensor_props;
+        cio2_props = bridge.sensors[bridge.n_sensors].cio2_props;
+        fwnode = bridge.sensors[bridge.n_sensors].fwnode;
             
         /*
         * No way to tell how many elements this array needs until 
@@ -275,12 +279,12 @@ static int connect_supported_devices(void)
         sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
         sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
                             data_lanes, (int)ssdb.lanes);
-        sensor_props[4] = remote_endpoints[(cdevs.n_devices * 2) + ENDPOINT_SENSOR];
+        sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
         sensor_props[5] = PROPERTY_ENTRY_NULL;
 
         cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes,
                             (int)ssdb.lanes);
-        cio2_props[1] = remote_endpoints[(cdevs.n_devices * 2) + ENDPOINT_CIO2];
+        cio2_props[1] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_CIO2];
         cio2_props[2] = PROPERTY_ENTRY_NULL;
 
         /* build the software nodes */
@@ -311,8 +315,8 @@ static int connect_supported_devices(void)
         ((struct v4l2_subdev *)dev->driver_data)->fwnode = fwnode;
 
         /* we're done */
-        cdevs.sensors[cdevs.n_devices].dev = dev;
-        cdevs.n_devices++;
+        bridge.sensors[bridge.n_sensors].dev = dev;
+        bridge.n_sensors++;
 
     }
 
@@ -335,18 +339,16 @@ static int surface_camera_init(void)
     /* Check for supported devices and connect them*/
     ret = connect_supported_devices();
 
-    if ((ret < 0) || (cdevs.n_devices == 0)) {
-        pr_err("Failed to connect any devices\n");
+    if ((ret < 0) || (bridge.n_sensors <= 0)) {
+        pr_err("cio2_bridge: Failed to connect any devices\n");
         goto out;
-    }
-
-    if (cdevs.n_devices > 0) {
-        pr_info("Found %d supported devices\n", cdevs.n_devices);
+    } else {
+        pr_info("Found %d supported devices\n", bridge.n_sensors);
     }
 
     /* Find pci device and add swnode as primary */
-    cio2 = pci_get_device(PCI_VENDOR_ID_INTEL, CIO2_PCI_ID, NULL);
-    if (!cio2) {
+    bridge.cio2 = pci_get_device(PCI_VENDOR_ID_INTEL, CIO2_PCI_ID, NULL);
+    if (!bridge.cio2) {
         ret = -EPROBE_DEFER;
         goto out;
     }
@@ -358,12 +360,20 @@ static int surface_camera_init(void)
         goto out;
     }
 
-    fwnode->secondary = ERR_PTR(-ENODEV);
-    set_primary_fwnode(&cio2->dev, fwnode);
+    /*
+     * We store the pci_dev's existing fwnode, beccause in the event we want 
+     * to reload (I.E. rmmod and insmod) this module we need to give the device
+     * its original fwnode back to prevent problems down the line
+     */
 
-    ret = device_reprobe(&cio2->dev);
+    bridge.cio2_fwnode = bridge.cio2->dev.fwnode;
+
+    fwnode->secondary = ERR_PTR(-ENODEV);
+    set_primary_fwnode(&bridge.cio2->dev, fwnode);
+
+    ret = device_reprobe(&bridge.cio2->dev);
     if (ret) {
-        dev_warn(&cio2->dev, "Reprobing error: %d\n", ret);
+        dev_warn(&bridge.cio2->dev, "Reprobing error: %d\n", ret);
         goto out;
     }
 
@@ -376,29 +386,17 @@ out:
 static int surface_camera_unregister_sensors(void)
 {
     int i,j;
-    struct sensor sensor;
-    struct fwnode_handle *fwnode;
+    struct sensor *sensor;
 
-    for (i=0; i < cdevs.n_devices; i++) {
+    for (i=0; i < bridge.n_sensors; i++) {
+        sensor = &bridge.sensors[i];
 
-        sensor = cdevs.sensors[i];
-
+        /* give the sensor its original fwnode back */
+        sensor->dev->fwnode = sensor->fwnode;
+        
         for (j=4; j>=0; j--) {
-            
-            software_node_unregister(&sensor.swnodes[j]);
-
-            fwnode = software_node_fwnode(&sensor.swnodes[j]);
-
-            if (!IS_ERR_OR_NULL(fwnode)) {
-
-                fwnode->secondary = NULL;
-
-                fwnode_handle_put(fwnode);
-            }
-
+            software_node_unregister(&sensor->swnodes[j]);
         }
-
-        put_device(sensor.dev);
     }
 
     return 0;
@@ -407,30 +405,19 @@ static int surface_camera_unregister_sensors(void)
 static void surface_camera_exit(void)
 {
     int ret;
-    struct fwnode_handle *fwnode;
 
-    if (cio2) {
-        cio2->dev.fwnode->secondary = NULL;
-        fwnode_handle_put(cio2->dev.fwnode);
-        cio2->dev.fwnode = NULL;
+    /* Give the pci_dev its original fwnode back */
+    if (bridge.cio2) {
+        bridge.cio2->dev.fwnode = bridge.cio2_fwnode;
+        pci_dev_put(bridge.cio2);
     }
-
-    pci_dev_put(cio2);
  
     ret = surface_camera_unregister_sensors();
 
-    if (ret) {
+    if (ret)
         pr_err("An error occurred unregistering the sensors\n");
-    }
 
     software_node_unregister(&cio2_hid_node);
-
-    fwnode = software_node_fwnode(&cio2_hid_node);
-
-    if (fwnode) {
-        fwnode->secondary = NULL;
-        fwnode_handle_put(fwnode);
-    }  
 
 }
 
