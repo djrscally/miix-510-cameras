@@ -392,7 +392,8 @@ static int surface_camera_unregister_sensors(void)
         sensor = &bridge.sensors[i];
 
         /* give the sensor its original fwnode back */
-        sensor->dev->fwnode = sensor->fwnode;
+        set_primary_fwnode(sensor->dev, sensor->fwnode);
+        put_device(sensor->dev);
         
         for (j=4; j>=0; j--) {
             software_node_unregister(&sensor->swnodes[j]);
@@ -408,7 +409,7 @@ static void surface_camera_exit(void)
 
     /* Give the pci_dev its original fwnode back */
     if (bridge.cio2) {
-        bridge.cio2->dev.fwnode = bridge.cio2_fwnode;
+        set_primary_fwnode(&bridge.cio2->dev, bridge.cio2_fwnode);
         pci_dev_put(bridge.cio2);
     }
  
