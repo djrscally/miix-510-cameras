@@ -219,6 +219,7 @@ static int connect_supported_devices(void)
     struct property_entry *cio2_props;
     struct fwnode_handle *fwnode;
     struct software_node *nodes;
+    struct v4l2_subdev *sd;
     u32 *data_lanes;
     int i, j, ret;
 
@@ -312,7 +313,8 @@ static int connect_supported_devices(void)
 
         fwnode->secondary = ERR_PTR(-ENODEV);
         set_primary_fwnode(dev, fwnode);
-        ((struct v4l2_subdev *)dev->driver_data)->fwnode = fwnode;
+        sd = dev_get_drvdata(dev);
+        sd->fwnode = fwnode;
 
         /* we're done */
         bridge.sensors[bridge.n_sensors].dev = dev;
