@@ -1,6 +1,6 @@
-From b94f4bb88c278fc8ddbb3f8909d79634bfe20a5e Mon Sep 17 00:00:00 2001
+From 42adb869713d171253eb5afda3db10968551d175 Mon Sep 17 00:00:00 2001
 From: Dan Scally <djrscally@gmail.com>
-Date: Fri, 11 Sep 2020 08:17:48 +0100
+Date: Fri, 11 Sep 2020 14:35:34 +0100
 Subject: [PATCH] Fix bugs in software_node_graph_get_next_endpoint()
 
 As originally written, the software_node_graph_get_next_endpoint() function
@@ -12,20 +12,34 @@ This patch rectifies both issues.
 
 Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
- drivers/base/swnode.c | 6 ++++++
- 1 file changed, 6 insertions(+)
+ drivers/base/swnode.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
 
 diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
-index 5cf9f1eef96f..a90bd6e43f87 100644
+index 5cf9f1eef96f..80255e0b7739 100644
 --- a/drivers/base/swnode.c
 +++ b/drivers/base/swnode.c
-@@ -581,10 +581,16 @@ software_node_graph_get_next_endpoint(const struct fwnode_handle *fwnode,
+@@ -563,6 +563,7 @@ software_node_graph_get_next_endpoint(const struct fwnode_handle *fwnode,
+ {
+ 	struct swnode *swnode = to_swnode(fwnode);
+ 	struct fwnode_handle *old = endpoint;
++	struct fwnode_handle *parent_of_old;
+ 	struct fwnode_handle *parent;
+ 	struct fwnode_handle *port;
+ 
+@@ -581,10 +582,22 @@ software_node_graph_get_next_endpoint(const struct fwnode_handle *fwnode,
  	}
  
  	for (; port; port = swnode_graph_find_next_port(parent, port)) {
 +
-+		if ((old) && (software_node_get_parent(old) != port ))
-+			old = NULL;
++		if (old) {
++			parent_of_old = software_node_get_parent(old);
++
++			if (parent_of_old != port)
++				old = NULL;
++
++			fwnode_handle_put(parent_of_old);
++		}
 +
  		endpoint = software_node_get_next_child(port, old);
  		fwnode_handle_put(old);
