@@ -1,6 +1,6 @@
-From 40b49b2dfb3e329acf135cd6c5c7e2fa7a052fda Mon Sep 17 00:00:00 2001
-From: Daniel Scally <djrscally@gmail.com>
-Date: Fri, 11 Sep 2020 00:06:11 +0100
+From b94f4bb88c278fc8ddbb3f8909d79634bfe20a5e Mon Sep 17 00:00:00 2001
+From: Dan Scally <djrscally@gmail.com>
+Date: Fri, 11 Sep 2020 08:17:48 +0100
 Subject: [PATCH] Fix bugs in software_node_graph_get_next_endpoint()
 
 As originally written, the software_node_graph_get_next_endpoint() function
@@ -10,16 +10,16 @@ is not a child of the port that is also passed.
 
 This patch rectifies both issues.
 
-Signed-off-by: Daniel Scally <djrscally@gmail.com>
+Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
- drivers/base/swnode.c | 9 ++++++++-
- 1 file changed, 8 insertions(+), 1 deletion(-)
+ drivers/base/swnode.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
 diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
-index 3667467196f0..5a28408d9137 100644
+index 5cf9f1eef96f..a90bd6e43f87 100644
 --- a/drivers/base/swnode.c
 +++ b/drivers/base/swnode.c
-@@ -581,10 +581,17 @@ software_node_graph_get_next_endpoint(const struct fwnode_handle *fwnode,
+@@ -581,10 +581,16 @@ software_node_graph_get_next_endpoint(const struct fwnode_handle *fwnode,
  	}
  
  	for (; port; port = swnode_graph_find_next_port(parent, port)) {
@@ -29,15 +29,13 @@ index 3667467196f0..5a28408d9137 100644
 +
  		endpoint = software_node_get_next_child(port, old);
  		fwnode_handle_put(old);
-+
  		if (endpoint)
--			break;		
-+			break;
+ 			break;
 +		else
 +			fwnode_handle_put(port);
  	}
  
  	fwnode_handle_put(port);
 -- 
-2.17.1
+2.25.1
 
