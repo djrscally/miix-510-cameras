@@ -312,7 +312,8 @@ static int connect_supported_devices(void)
         }
 
         fwnode->secondary = ERR_PTR(-ENODEV);
-        set_primary_fwnode(dev, fwnode);
+        dev->fwnode = fwnode;
+
         sd = dev_get_drvdata(dev);
         sd->fwnode = fwnode;
 
@@ -371,7 +372,7 @@ static int surface_camera_init(void)
     bridge.cio2_fwnode = bridge.cio2->dev.fwnode;
 
     fwnode->secondary = ERR_PTR(-ENODEV);
-    set_primary_fwnode(&bridge.cio2->dev, fwnode);
+    bridge.cio2->dev.fwnode = fwnode;    
 
     ret = device_reprobe(&bridge.cio2->dev);
     if (ret) {
@@ -394,7 +395,7 @@ static int surface_camera_unregister_sensors(void)
         sensor = &bridge.sensors[i];
 
         /* give the sensor its original fwnode back */
-        set_primary_fwnode(sensor->dev, sensor->fwnode);
+        sensor->dev->fwnode = sensor->fwnode;
         put_device(sensor->dev);
         
         for (j=4; j>=0; j--) {
@@ -411,7 +412,7 @@ static void surface_camera_exit(void)
 
     /* Give the pci_dev its original fwnode back */
     if (bridge.cio2) {
-        set_primary_fwnode(&bridge.cio2->dev, bridge.cio2_fwnode);
+        bridge.cio2->dev.fwnode = bridge.cio2_fwnode;
         pci_dev_put(bridge.cio2);
     }
  
