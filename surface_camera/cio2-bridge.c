@@ -10,7 +10,8 @@
 #include <linux/fwnode.h>
 #include <linux/kref.h>
 
-#include "surface_camera.h"
+static void cio2_bridge_exit(void);
+static int cio2_bridge_init(void);
 
 #define MAX_CONNECTED_DEVICES                4
 #define SWNODE_SENSOR_HID                    0
@@ -248,7 +249,7 @@ static int connect_supported_devices(void)
         }
 
         /* Store sensor's existing fwnode */
-        bridge.sensors[bridge.n_sensors].fwnode = dev->fwnode;
+        bridge.sensors[bridge.n_sensors].fwnode = fwnode_handle_get(dev->fwnode);
 
         get_acpi_ssdb_sensor_data(dev, &ssdb);
 
@@ -326,7 +327,7 @@ static int connect_supported_devices(void)
     return 0;
 }
 
-static int surface_camera_init(void)
+static int cio2_bridge_init(void)
 {
     struct fwnode_handle *fwnode;
     int ret;
@@ -369,7 +370,7 @@ static int surface_camera_init(void)
      * its original fwnode back to prevent problems down the line
      */
 
-    bridge.cio2_fwnode = bridge.cio2->dev.fwnode;
+    bridge.cio2_fwnode = fwnode_handle_get(bridge.cio2->dev.fwnode);
 
     fwnode->secondary = ERR_PTR(-ENODEV);
     bridge.cio2->dev.fwnode = fwnode;    
@@ -382,11 +383,11 @@ static int surface_camera_init(void)
 
     return 0;
 out:
-    surface_camera_exit();
+    cio2_bridge_exit();
     return ret;
 }
 
-static int surface_camera_unregister_sensors(void)
+static int cio2_bridge_unregister_sensors(void)
 {
     int i,j;
     struct sensor *sensor;
@@ -396,6 +397,7 @@ static int surface_camera_unregister_sensors(void)
 
         /* give the sensor its original fwnode back */
         sensor->dev->fwnode = sensor->fwnode;
+        fwnode_handle_put(sensor->fwnode);
         put_device(sensor->dev);
         
         for (j=4; j>=0; j--) {
@@ -406,17 +408,18 @@ static int surface_camera_unregister_sensors(void)
     return 0;
 }
 
-static void surface_camera_exit(void)
+static void cio2_bridge_exit(void)
 {
     int ret;
 
     /* Give the pci_dev its original fwnode back */
     if (bridge.cio2) {
         bridge.cio2->dev.fwnode = bridge.cio2_fwnode;
+        fwnode_handle_put(bridge.cio2_fwnode);
         pci_dev_put(bridge.cio2);
     }
  
-    ret = surface_camera_unregister_sensors();
+    ret = cio2_bridge_unregister_sensors();
 
     if (ret)
         pr_err("An error occurred unregistering the sensors\n");
@@ -425,8 +428,8 @@ static void surface_camera_exit(void)
 
 }
 
-module_init(surface_camera_init);
-module_exit(surface_camera_exit);
+module_init(cio2_bridge_init);
+module_exit(cio2_bridge_exit);
 
 MODULE_DESCRIPTION("A bridge driver to connect sensors to CIO2 infrastructure.");
 MODULE_LICENSE("GPL v2");

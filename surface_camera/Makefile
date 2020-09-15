@@ -1,4 +1,4 @@
-obj-m += surface_camera.o
+obj-m += cio2-bridge.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

@@ -51,6 +51,8 @@
 #define OV2680_VTS_30FPS		0x0808 /* default for 30 fps */
 #define OV2680_VTS_MAX			0xffff
 
+#define CIO2_PCI_ID                     0x9d32
+
 enum ov2680_mode_id {
 	OV2680_MODE_QUXGA_800_600,
 	OV2680_MODE_720P_1280_720,
@@ -182,6 +184,7 @@ struct ov2680_device {
 	/* references */
     struct i2c_client       		*client;			/* client for this physical device */
 	struct device					*pmic_dev;			/* physical device for the sensor's PMIC */
+	struct pci_dev					*cio2_dev;
 	struct v4l2_subdev				sd;
 	struct clk						*clk;
 	u32								clk_freq;
