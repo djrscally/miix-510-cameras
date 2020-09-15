@@ -1140,8 +1140,6 @@ static int ov2680_remove(struct i2c_client *client)
 
 	v4l2_device_unregister_subdev(sd);
 
-	device_link_remove(&client->dev, &ov2680->cio2_dev->dev);
-
 	return 0;
 }
 
@@ -1156,22 +1154,6 @@ static int ov2680_probe(struct i2c_client *client)
 		dev_err(&client->dev, "out of memory\n");
 		return -ENOMEM;
 	}
-
-	/*
-	 * We need to link the sensor device to that of the cio2 infrastructure
-	 * as early as possible.
-	 */
-
-	ov2680->cio2_dev = pci_get_device(PCI_VENDOR_ID_INTEL, CIO2_PCI_ID, NULL);
-    if (!ov2680->cio2_dev) {
-        ret = -EPROBE_DEFER;
-        goto remove_out;
-    }
-
-	dl = device_link_add(&client->dev, &ov2680->cio2_dev->dev, NULL);
-
-	if (!dl)
-		dev_err(&client->dev, "Failed to link to the cio2 device; this module may not function without being reloaded\n");
 
 	/* Sensor 'aint on, tell it so */
 	ov2680->is_enabled = 0;
