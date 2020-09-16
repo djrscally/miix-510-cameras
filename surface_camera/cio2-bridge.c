@@ -142,17 +142,12 @@ struct sensor_bios_data_packed {
     u8 reserved2[13];
 } __attribute__((__packed__));
 
-/* Fields needed by ipu4 driver */
+/* Fields needed by bridge driver */
 struct sensor_bios_data {
     struct device *dev;
     u8 link;
     u8 lanes;
     u32 mclkspeed;
-    u8 vcmtype;
-    u8 flash;
-    u8 degree;
-    u8 mclkport;
-    u16 xshutdown;
 };
 
 static int read_acpi_block(struct device *dev, char *id, void *data,
@@ -201,14 +196,48 @@ static int get_acpi_ssdb_sensor_data(struct device *dev,
         return ret;
     }
 
-    /* Xshutdown is not part of the ssdb data */
     sensor->link = sensor_data.link;
     sensor->lanes = sensor_data.lanes;
-    sensor->mclkport = sensor_data.mclkport;
-    sensor->flash = sensor_data.flash;
     sensor->mclkspeed = sensor_data.mclkspeed;
 
     return 0;
+}
+
+static int create_endpoint_properties(struct device *dev,
+                    struct sensor_bios_data *ssdb,
+                    struct property_entry *sensor_props,
+                    struct property_entry *cio2_props)
+{
+        u32 *data_lanes;
+        int i;
+
+        data_lanes = devm_kmalloc(dev, sizeof(u32) * (int)ssdb->lanes,
+                            GFP_KERNEL);
+
+        if (!data_lanes) {
+            dev_err(dev, "Couldn't allocate memory for data lanes array\n");
+            return -ENOMEM;
+        }
+
+        for (i = 0; i < (int)ssdb->lanes; i++) {
+            data_lanes[i] = (u32)i+1;
+        }
+
+        sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency",
+                            ssdb->mclkspeed);
+        sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
+        sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
+        sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
+                            data_lanes, (int)ssdb->lanes);
+        sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
+        sensor_props[5] = PROPERTY_ENTRY_NULL;
+
+        cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes,
+                            (int)ssdb->lanes);
+        cio2_props[1] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_CIO2];
+        cio2_props[2] = PROPERTY_ENTRY_NULL;
+
+        return 0;
 }
 
 static int connect_supported_devices(void)
@@ -221,8 +250,7 @@ static int connect_supported_devices(void)
     struct fwnode_handle *fwnode;
     struct software_node *nodes;
     struct v4l2_subdev *sd;
-    u32 *data_lanes;
-    int i, j, ret;
+    int i, ret;
 
     for (i = 0; i < ARRAY_SIZE(supported_devices); i++) {
 
@@ -248,7 +276,10 @@ static int connect_supported_devices(void)
             pr_info("Found supported device %s\n", supported_devices[i]);
         }
 
-        /* Store sensor's existing fwnode */
+        /*
+         * Store sensor's existing fwnode so that it can be restored if this
+         * module is removed.
+         */
         bridge.sensors[bridge.n_sensors].fwnode = fwnode_handle_get(dev->fwnode);
 
         get_acpi_ssdb_sensor_data(dev, &ssdb);
@@ -258,67 +289,55 @@ static int connect_supported_devices(void)
         cio2_props = bridge.sensors[bridge.n_sensors].cio2_props;
         fwnode = bridge.sensors[bridge.n_sensors].fwnode;
             
-        /*
-        * No way to tell how many elements this array needs until 
-        * this point unfortunately, so it will have to be dynamically
-        * allocated. use devres to avoid snafu later
-        */
-        data_lanes = devm_kmalloc(dev, sizeof(u32) * (int)ssdb.lanes,
-                            GFP_KERNEL);
+        ret = create_endpoint_properties(dev, &ssdb, sensor_props, cio2_props);
 
-        if (!data_lanes) {
-            dev_err(dev, "Couldn't allocate memory for data lanes array\n");
-            return -ENOMEM;
-        }
-
-        for (j = 0; j < (int)ssdb.lanes; j++) {
-            data_lanes[j] = (u32)j+1;
-        }
-
-        sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency",
-                            ssdb.mclkspeed);
-        sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
-        sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
-        sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
-                            data_lanes, (int)ssdb.lanes);
-        sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
-        sensor_props[5] = PROPERTY_ENTRY_NULL;
-
-        cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes,
-                            (int)ssdb.lanes);
-        cio2_props[1] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_CIO2];
-        cio2_props[2] = PROPERTY_ENTRY_NULL;
+        if (ret)
+            return ret;
 
         /* build the software nodes */
 
-        nodes[SWNODE_SENSOR_HID] = NODE_HID(supported_devices[i]);                                                /* Sensor HID Node */
-        nodes[SWNODE_SENSOR_PORT] = NODE_PORT("port0",&nodes[SWNODE_SENSOR_HID]);                                /* Sensor Port Node */
-        nodes[SWNODE_SENSOR_ENDPOINT] = NODE_ENDPOINT("endpoint0", &nodes[SWNODE_SENSOR_PORT], sensor_props);     /* Sensor Endpoint Node */
-        nodes[SWNODE_CIO2_PORT] = NODE_PORT(port_names[(int)ssdb.link], &cio2_hid_node);                         /* CIO2 Port Node */
-        nodes[SWNODE_CIO2_ENDPOINT] = NODE_ENDPOINT("endpoint0", &nodes[SWNODE_CIO2_PORT], cio2_props);           /* CIO2 Endpoint Node */
-        nodes[SWNODE_NULL_TERMINATOR] = SOFTWARE_NODE_NULL;
+        nodes[SWNODE_SENSOR_HID]        = NODE_HID(supported_devices[i]);
+        nodes[SWNODE_SENSOR_PORT]       = NODE_PORT(
+                                            "port0",
+                                            &nodes[SWNODE_SENSOR_HID]);
+        nodes[SWNODE_SENSOR_ENDPOINT]   = NODE_ENDPOINT(
+                                            "endpoint0",
+                                            &nodes[SWNODE_SENSOR_PORT],
+                                            sensor_props);
+        nodes[SWNODE_CIO2_PORT]         = NODE_PORT(
+                                            port_names[(int)ssdb.link],
+                                            &cio2_hid_node);
+        nodes[SWNODE_CIO2_ENDPOINT]     = NODE_ENDPOINT(
+                                            "endpoint0",
+                                            &nodes[SWNODE_CIO2_PORT],
+                                            cio2_props);
+        nodes[SWNODE_NULL_TERMINATOR]   = SOFTWARE_NODE_NULL;
 
         ret = software_node_register_nodes(nodes);
         if (ret) {
             dev_err(dev, "Failed to register the software nodes for %s\n",
                                 supported_devices[i]);
-            return 0;
+            return ret;
         }
 
         fwnode = software_node_fwnode(&nodes[SWNODE_SENSOR_HID]);
         if (!fwnode) {
             dev_err(dev, "Failed to get fwnode from software node for %s\n",
                                 supported_devices[i]);
-            return 0;
+            return ret;
         }
 
         fwnode->secondary = ERR_PTR(-ENODEV);
         dev->fwnode = fwnode;
 
+        /*
+         * The device should by this point has driver_data set to an instance
+         * of struct v4l2_subdev; set the fwnode for that too.
+         */
+
         sd = dev_get_drvdata(dev);
         sd->fwnode = fwnode;
 
-        /* we're done */
         bridge.sensors[bridge.n_sensors].dev = dev;
         bridge.n_sensors++;
 
@@ -332,7 +351,6 @@ static int cio2_bridge_init(void)
     struct fwnode_handle *fwnode;
     int ret;
 
-    /* Register the CIO2 Parent node */
     ret = software_node_register(&cio2_hid_node);
 
     if (ret < 0) {
@@ -340,7 +358,6 @@ static int cio2_bridge_init(void)
         return -EINVAL;
     }
 
-    /* Check for supported devices and connect them*/
     ret = connect_supported_devices();
 
     if ((ret < 0) || (bridge.n_sensors <= 0)) {
@@ -350,10 +367,9 @@ static int cio2_bridge_init(void)
         pr_info("Found %d supported devices\n", bridge.n_sensors);
     }
 
-    /* Find pci device and add swnode as primary */
     bridge.cio2 = pci_get_device(PCI_VENDOR_ID_INTEL, CIO2_PCI_ID, NULL);
     if (!bridge.cio2) {
-        ret = -EPROBE_DEFER;
+        ret = -ENODEV;
         goto out;
     }
 
