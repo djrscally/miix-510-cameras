@@ -1139,6 +1139,7 @@ static int ov2680_remove(struct i2c_client *client)
 	}
 
 	v4l2_device_unregister_subdev(sd);
+	device_link_remove(&client->dev, &ov2680->cio2_dev->dev);
 
 	return 0;
 }
@@ -1146,13 +1147,26 @@ static int ov2680_remove(struct i2c_client *client)
 static int ov2680_probe(struct i2c_client *client)
 {
 	struct ov2680_device 		*ov2680;
-	struct device_link			*dl;
-	int 						ret;
+	struct device_link		*dl;
+	int 				ret;
 
 	ov2680 = kzalloc(sizeof(*ov2680), GFP_KERNEL);
 	if (!ov2680) {
 		dev_err(&client->dev, "out of memory\n");
 		return -ENOMEM;
+	}
+
+	ov2680->cio2_dev = pci_get_device(PCI_VENDOR_ID_INTEL, CIO2_PCI_ID, NULL);
+    	if (!ov2680->cio2_dev) {
+        	ret = -ENODEV;
+        	goto remove_out;
+    	}
+
+	dl = device_link_add(&client->dev, &ov2680->cio2_dev->dev, NULL);
+
+	if (!dl) {
+		ret = -ENODEV;
+		goto remove_out;
 	}
 
 	/* Sensor 'aint on, tell it so */

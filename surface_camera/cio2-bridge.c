@@ -78,7 +78,7 @@ struct software_node cio2_hid_node = { CIO2_HID, };
 struct sensor {
     struct device *dev;
     struct software_node swnodes[5];
-    struct property_entry sensor_props[6];
+    struct property_entry sensor_props[7];
     struct property_entry cio2_props[3];
     struct fwnode_handle *fwnode;
 };
@@ -148,6 +148,7 @@ struct sensor_bios_data {
     u8 link;
     u8 lanes;
     u32 mclkspeed;
+    u8 degree;
 };
 
 static int read_acpi_block(struct device *dev, char *id, void *data,
@@ -199,6 +200,7 @@ static int get_acpi_ssdb_sensor_data(struct device *dev,
     sensor->link = sensor_data.link;
     sensor->lanes = sensor_data.lanes;
     sensor->mclkspeed = sensor_data.mclkspeed;
+    sensor->degree = sensor_data.degree;
 
     return 0;
 }
@@ -230,7 +232,8 @@ static int create_endpoint_properties(struct device *dev,
         sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
                             data_lanes, (int)ssdb->lanes);
         sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
-        sensor_props[5] = PROPERTY_ENTRY_NULL;
+	sensor_props[5] = PROPERTY_ENTRY_U8("degree", ssdb->degree);
+        sensor_props[6] = PROPERTY_ENTRY_NULL;
 
         cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes", data_lanes,
                             (int)ssdb->lanes);
