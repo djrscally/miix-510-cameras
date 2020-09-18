@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/acpi.h>
-#include <acpi/acpi_bus.h>
 #include <linux/device.h>
+#include <linux/fwnode.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <media/v4l2-subdev.h>
 
-#include <linux/fwnode.h>
-#include <linux/kref.h>
+#include <media/v4l2-subdev.h>
 
 static void cio2_bridge_exit(void);
 static int cio2_bridge_init(void);
@@ -29,27 +27,22 @@ static int cio2_bridge_init(void);
 #define ENDPOINT_CIO2				1
 
 #define NODE_HID(_HID)				\
-((const struct software_node) {			\
-	_HID,					\
-})
+	((const struct software_node) {		\
+		_HID,				\
+	})
 
 #define NODE_PORT(_PORT, _HID_NODE)		\
-((const struct software_node) {			\
-	_PORT,					\
-	_HID_NODE,				\
-})
+	((const struct software_node) {		\
+		_PORT,				\
+		_HID_NODE,			\
+	})
 
 #define NODE_ENDPOINT(_EP, _PORT, _PROPS)	\
-((const struct software_node) {			\
-	_EP,					\
-	_PORT,					\
-	_PROPS,					\
-})
-
-#define PROPERTY_ENTRY_NULL			\
-((const struct property_entry) { })
-#define SOFTWARE_NODE_NULL			\
-((const struct software_node) { })
+	((const struct software_node) {		\
+		_EP,				\
+		_PORT,				\
+		_PROPS,				\
+	})
 
 /*
  * Extend this array with ACPI Hardware ID's of devices known to be
@@ -62,22 +55,12 @@ static char *supported_devices[] = {
 	"OVTI5648",
 };
 
-/*
- * software_node needs const char * names. Can't snprintf a const char *,
- * so instead we need an array of them and use the port num from SSDB as
- * an index.
- */
-
-const char *port_names[] = {
-	"port0", "port1", "port2", "port3", "port4",
-	"port5", "port6", "port7", "port8", "port9"
-};
-
 struct software_node cio2_hid_node = { CIO2_HID, };
 
 struct sensor {
+	char name[20];
 	struct device *dev;
-	struct software_node swnodes[5];
+	struct software_node swnodes[6];
 	struct property_entry sensor_props[6];
 	struct property_entry cio2_props[3];
 	struct fwnode_handle *fwnode;
@@ -154,48 +137,45 @@ static int read_acpi_block(struct device *dev, char *id, void *data, u32 size)
 {
 	union acpi_object *obj;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
-	struct acpi_handle *dev_handle = ACPI_HANDLE(dev);
-	int status;
-	u32 buffer_length;
+	struct acpi_handle *handle = ACPI_HANDLE(dev);
+	acpi_status status;
+	int ret;
 
-	status = acpi_evaluate_object(dev_handle, id, NULL, &buffer);
-	if (!ACPI_SUCCESS(status))
+	status = acpi_evaluate_object(handle, id, NULL, &buffer);
+	if (ACPI_FAILURE(status))
 		return -ENODEV;
 
-	obj = (union acpi_object *)buffer.pointer;
+	obj = buffer.pointer;
 	if (!obj || obj->type != ACPI_TYPE_BUFFER) {
 		dev_err(dev, "Could't read acpi buffer\n");
-		status = -ENODEV;
-		goto err;
+		ret = -ENODEV;
+		goto err_free_buff;
 	}
 
 	if (obj->buffer.length > size) {
 		dev_err(dev, "Given buffer is too small\n");
-		status = -ENODEV;
-		goto err;
+		ret = -ENODEV;
+		goto err_free_buff;
 	}
 
-	memcpy(data, obj->buffer.pointer, min(size, obj->buffer.length));
-	buffer_length = obj->buffer.length;
+	memcpy(data, obj->buffer.pointer, obj->buffer.length);
 	kfree(buffer.pointer);
 
-	return buffer_length;
-err:
+	return obj->buffer.length;;
+err_free_buff:
 	kfree(buffer.pointer);
-	return status;
+	return ret;
 }
 
 static int get_acpi_ssdb_sensor_data(struct device *dev,
 				     struct sensor_bios_data *sensor)
 {
 	struct sensor_bios_data_packed sensor_data;
-	int ret = read_acpi_block(dev, "SSDB", &sensor_data,
-				  sizeof(sensor_data));
-
-	if (ret < 0) {
-		dev_err(dev, "Failed to fetch SSDB data\n");
+	int ret;
+	
+	ret = read_acpi_block(dev, "SSDB", &sensor_data, sizeof(sensor_data));
+	if (ret < 0)
 		return ret;
-	}
 
 	sensor->link = sensor_data.link;
 	sensor->lanes = sensor_data.lanes;
@@ -204,43 +184,88 @@ static int get_acpi_ssdb_sensor_data(struct device *dev,
 	return 0;
 }
 
-static int create_endpoint_properties(struct device *dev,
-				      struct sensor_bios_data *ssdb,
-				      struct property_entry *sensor_props,
-				      struct property_entry *cio2_props)
+static int create_endpoint_properties(struct sensor *sensor,
+				      struct sensor_bios_data *ssdb)
 {
-		u32 *data_lanes;
-		int i;
+	struct property_entry *sensor_props;
+	struct property_entry *cio2_props;
+	u32 *data_lanes;
+	int i;
 
-		data_lanes = devm_kmalloc(dev, sizeof(u32) * (int)ssdb->lanes,
-					  GFP_KERNEL);
+	data_lanes = devm_kmalloc_array(sensor->dev, ssdb->lanes, sizeof(u32),
+					GFP_KERNEL);
+	if (!data_lanes)
+		return -ENOMEM;
 
-		if (!data_lanes) {
-			dev_err(dev,
-				"Couldn't allocate memory for data lanes array\n");
-			return -ENOMEM;
-		}
+	for (i = 0; i < ssdb->lanes; i++)
+		data_lanes[i] = i + 1;
 
-		for (i = 0; i < (int)ssdb->lanes; i++)
-			data_lanes[i] = (u32)i + 1;
+	sensor_props = kcalloc(6, sizeof(*sensor_props), GFP_KERNEL);
+	if (!sensor_props)
+		return -ENOMEM;
 
-		sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency",
-						     ssdb->mclkspeed);
-		sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
-		sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
-		sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
-							       data_lanes,
-							       (int)ssdb->lanes);
-		sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
-		sensor_props[5] = PROPERTY_ENTRY_NULL;
+	sensor_props[0] = PROPERTY_ENTRY_U32("clock-frequency",
+						ssdb->mclkspeed);
+	sensor_props[1] = PROPERTY_ENTRY_U32("bus-type", 5);
+	sensor_props[2] = PROPERTY_ENTRY_U32("clock-lanes", 0);
+	sensor_props[3] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
+							data_lanes,
+							(int)ssdb->lanes);
+	sensor_props[4] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_SENSOR];
 
-		cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
-							     data_lanes,
-							     (int)ssdb->lanes);
-		cio2_props[1] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_CIO2];
-		cio2_props[2] = PROPERTY_ENTRY_NULL;
+	memcpy(sensor->sensor_props, sensor_props, sizeof(*sensor_props) * 6);
+	kfree(sensor_props);
 
-		return 0;
+	cio2_props = kcalloc(6, sizeof(*cio2_props), GFP_KERNEL);
+	if (!cio2_props)
+		return -ENOMEM;
+
+	cio2_props[0] = PROPERTY_ENTRY_U32_ARRAY_LEN("data-lanes",
+						     data_lanes,
+						     ssdb->lanes);
+	cio2_props[1] = remote_endpoints[(bridge.n_sensors * 2) + ENDPOINT_CIO2];
+
+	memcpy(sensor->cio2_props, cio2_props, sizeof(*cio2_props) * 6);
+	kfree(cio2_props);
+
+	return 0;
+}
+
+static int create_connection_swnodes(struct sensor *sensor,
+				     struct sensor_bios_data *ssdb)
+{
+	struct software_node *nodes;
+	char portn[6];
+	int ret;
+
+	ret = snprintf(portn, 6, "port%d", ssdb->link);
+
+	if (!ret) {
+		pr_info("cio2-bridge: failed to print the portname\n");
+		return -EINVAL;
+	}
+
+	nodes = kcalloc(6, sizeof(*nodes) * 6, GFP_KERNEL);
+
+	if (!nodes)
+		return -ENOMEM;
+
+	nodes[SWNODE_SENSOR_HID] = NODE_HID(sensor->name);
+	nodes[SWNODE_SENSOR_PORT] = NODE_PORT("port0",
+					      &sensor->swnodes[SWNODE_SENSOR_HID]);
+	nodes[SWNODE_SENSOR_ENDPOINT] = NODE_ENDPOINT("endpoint0",
+						      &sensor->swnodes[SWNODE_SENSOR_PORT],
+						      sensor->sensor_props);
+	nodes[SWNODE_CIO2_PORT] = NODE_PORT(portn,
+					    &cio2_hid_node);
+	nodes[SWNODE_CIO2_ENDPOINT] = NODE_ENDPOINT("endpoint0",
+						    &sensor->swnodes[SWNODE_CIO2_PORT],
+						    sensor->cio2_props);
+
+	memcpy(sensor->swnodes, nodes, sizeof(*nodes) * 6);
+	kfree(nodes);
+
+	return 0;
 }
 
 static int connect_supported_devices(void)
@@ -249,12 +274,9 @@ static int connect_supported_devices(void)
 	struct device *dev;
 	struct sensor_bios_data ssdb;
 	struct sensor *sensor;
-	struct property_entry *sensor_props;
-	struct property_entry *cio2_props;
 	struct fwnode_handle *fwnode;
-	struct software_node *nodes;
 	struct v4l2_subdev *sd;
-	int i, ret;
+	int i, j, ret;
 
 	for (i = 0; i < ARRAY_SIZE(supported_devices); i++) {
 		adev = acpi_dev_get_first_match_dev(supported_devices[i],
@@ -274,13 +296,19 @@ static int connect_supported_devices(void)
 		if (!dev->driver_data) {
 			pr_info("ACPI match for %s, but it has no driver\n",
 				supported_devices[i]);
+			put_device(dev);
 			continue;
-		} else {
-			pr_info("Found supported device %s\n",
-				supported_devices[i]);
 		}
 
+		pr_info("Found supported device %s\n", supported_devices[i]);
+
 		sensor = &bridge.sensors[bridge.n_sensors];
+		sensor->dev = dev;
+
+		ret = snprintf(sensor->name, 20, "%s", supported_devices[i]);
+		if (!ret)
+			return -EINVAL;
+
 		/*
 		 * Store sensor's existing fwnode so that it can be restored if
 		 * this module is removed.
@@ -289,33 +317,17 @@ static int connect_supported_devices(void)
 
 		get_acpi_ssdb_sensor_data(dev, &ssdb);
 
-		nodes = sensor->swnodes;
-		sensor_props = sensor->sensor_props;
-		cio2_props = sensor->cio2_props;
-		fwnode = sensor->fwnode;
-
-		ret = create_endpoint_properties(dev, &ssdb, sensor_props,
-						 cio2_props);
-
+		ret = create_endpoint_properties(sensor, &ssdb);
 		if (ret)
 			return ret;
 
 		/* build the software nodes */
 
-		nodes[SWNODE_SENSOR_HID] = NODE_HID(supported_devices[i]);
-		nodes[SWNODE_SENSOR_PORT] = NODE_PORT("port0",
-						      &nodes[SWNODE_SENSOR_HID]);
-		nodes[SWNODE_SENSOR_ENDPOINT] = NODE_ENDPOINT("endpoint0",
-							      &nodes[SWNODE_SENSOR_PORT],
-							      sensor_props);
-		nodes[SWNODE_CIO2_PORT] = NODE_PORT(port_names[(int)ssdb.link],
-						    &cio2_hid_node);
-		nodes[SWNODE_CIO2_ENDPOINT] = NODE_ENDPOINT("endpoint0",
-							    &nodes[SWNODE_CIO2_PORT],
-							    cio2_props);
-		nodes[SWNODE_NULL_TERMINATOR]   = SOFTWARE_NODE_NULL;
+		ret = create_connection_swnodes(sensor, &ssdb);
+		if (ret)
+			return ret;
 
-		ret = software_node_register_nodes(nodes);
+		ret = software_node_register_nodes(sensor->swnodes);
 		if (ret) {
 			dev_err(dev,
 				"Failed to register software nodes for %s\n",
@@ -323,12 +335,13 @@ static int connect_supported_devices(void)
 			return ret;
 		}
 
-		fwnode = software_node_fwnode(&nodes[SWNODE_SENSOR_HID]);
+		fwnode = software_node_fwnode(&sensor->swnodes[SWNODE_SENSOR_HID]);
 		if (!fwnode) {
 			dev_err(dev,
 				"Failed to get software node for %s\n",
 				supported_devices[i]);
-			return ret;
+			ret = -ENODEV;
+			goto err_unregister_nodes;
 		}
 
 		fwnode->secondary = ERR_PTR(-ENODEV);
@@ -342,11 +355,21 @@ static int connect_supported_devices(void)
 		sd = dev_get_drvdata(dev);
 		sd->fwnode = fwnode;
 
-		sensor->dev = dev;
 		bridge.n_sensors++;
 	}
 
 	return 0;
+
+err_unregister_nodes:
+
+	for (j = 4; j >= 0; j--)
+		software_node_unregister(&sensor->swnodes[j]);
+
+err_put_dev:
+
+	put_device(dev);
+
+	return ret;
 }
 
 static int cio2_bridge_init(void)
@@ -355,10 +378,9 @@ static int cio2_bridge_init(void)
 	int ret;
 
 	ret = software_node_register(&cio2_hid_node);
-
 	if (ret < 0) {
-		pr_err("Failed to register the CIO2 HID node\n");
-		return -EINVAL;
+		pr_err("cio2-bridge: Failed to register the CIO2 HID node\n");
+		return ret;
 	}
 
 	ret = connect_supported_devices();
@@ -407,7 +429,7 @@ out:
 	return ret;
 }
 
-static int cio2_bridge_unregister_sensors(void)
+static void cio2_bridge_unregister_sensors(void)
 {
 	int i, j;
 	struct sensor *sensor;
@@ -423,14 +445,10 @@ static int cio2_bridge_unregister_sensors(void)
 		for (j = 4; j >= 0; j--)
 			software_node_unregister(&sensor->swnodes[j]);
 	}
-
-	return 0;
 }
 
 static void cio2_bridge_exit(void)
 {
-	int ret;
-
 	/* Give the pci_dev its original fwnode back */
 	if (bridge.cio2) {
 		bridge.cio2->dev.fwnode = bridge.cio2_fwnode;
@@ -438,10 +456,7 @@ static void cio2_bridge_exit(void)
 		pci_dev_put(bridge.cio2);
 	}
 
-	ret = cio2_bridge_unregister_sensors();
-
-	if (ret)
-		pr_err("An error occurred unregistering the sensors\n");
+	cio2_bridge_unregister_sensors();
 
 	software_node_unregister(&cio2_hid_node);
 }
