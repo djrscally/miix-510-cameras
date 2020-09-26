@@ -12,11 +12,17 @@
  * working
  */
 
-struct supported_device supported_devices[] = {
-	{"INT33BE", "INT33BE:00"},
-	{"OVTI2680", "OVTI2680:00"},
-	{"OVTI5648", "OVTI5648:00"},
+static const struct ipu3_sensor supported_devices[] = {
+	IPU3_SENSOR("INT33BE", "INT33BE:00"),
+	IPU3_SENSOR("OVTI2680", "OVTI2680:00"),
+	IPU3_SENSOR("OVTI5648", "OVTI5648:00")
 };
+
+/*
+	{"INT33BE", {{"INT33BE:00", 0}, { }}},
+	{"OVTI2680", {{"OVTI2680:00", 0}, { }}},
+	{"OVTI5648", {{"OVTI5648:00", 0}, { }}},
+*/
 
 struct software_node cio2_hid_node = { CIO2_HID, };
 
@@ -207,18 +213,9 @@ static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
  */
 {
 	struct i2c_client *client;
-	struct i2c_device_id *id_table;
 	int ret;
 
 	client = container_of(sensor->dev, struct i2c_client, dev);
-
-	id_table = kcalloc(2, sizeof(*id_table), GFP_KERNEL);
-	if (!id_table)
-		return -ENOMEM;
-
-	id_table[0] = (const struct i2c_device_id){supported_devices[dev_idx].client_name, 0};
-	memcpy(sensor->id_table, id_table, sizeof(*id_table) * 2);
-	kfree(id_table);
 
 	sensor->old_drv = container_of(sensor->dev->driver, struct i2c_driver, driver);
 	sensor->new_drv = kmalloc(sizeof(*sensor->new_drv), GFP_KERNEL);
@@ -228,7 +225,7 @@ static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
 	sensor->new_drv->driver.name = sensor->old_drv->driver.name;
 	sensor->new_drv->probe_new = sensor->old_drv->probe_new;
 	sensor->new_drv->remove = sensor->old_drv->remove;
-	sensor->new_drv->id_table = sensor->id_table;
+	sensor->new_drv->id_table = supported_devices[dev_idx].i2c_id;
 
 	device_release_driver(sensor->dev);
 	i2c_del_driver(sensor->old_drv);
@@ -249,6 +246,7 @@ err_replace_old_drv:
 	i2c_add_driver(sensor->old_drv);
 
 	device_reprobe(sensor->dev);
+
 	return ret;
 }
 
@@ -329,7 +327,6 @@ static int connect_supported_devices(void)
 
 		fwnode->secondary = ERR_PTR(-ENODEV);
 		dev->fwnode = fwnode;
-//		sd->fwnode = fwnode;
 
 		ret = cio2_bridge_reprobe_sensor(sensor, i);
 		if (ret)
