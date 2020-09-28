@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 #include <linux/fwnode.h>
+#include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/property.h>
@@ -37,15 +38,18 @@
 		_PROPS,				\
 	})
 
-#define I2C_DEVICE_ID(_DEVNAME)			\
-	((const struct i2c_device_id {		\
-		_DEVNAME,			\
-		0				\
-	})
+#define IPU3_SENSOR(_HID, _CLIENT)		\
+	{					\
+		.hid = _HID,			\
+		.i2c_id = {			\
+			{_CLIENT, 0},		\
+			{ },			\
+		}				\
+	}
 
-struct supported_device {
+struct ipu3_sensor {
 	const char hid[20];
-	const char client_name[20];
+	const struct i2c_device_id i2c_id[2];
 };
 
 struct sensor {
@@ -57,7 +61,7 @@ struct sensor {
 	struct fwnode_handle *fwnode;
 	struct i2c_device_id id_table[2];
 	struct i2c_driver *old_drv;
-	struct i2c_driver *new_drv;
+	struct i2c_driver new_drv;
 };
 
 struct cio2_bridge {

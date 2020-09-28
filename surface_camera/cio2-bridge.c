@@ -2,7 +2,6 @@
 #include <linux/acpi.h>
 #include <linux/cio2-bridge.h>
 #include <linux/device.h>
-#include <linux/i2c.h>
 #include <linux/module.h>
 
 #include <media/v4l2-subdev.h>
@@ -18,15 +17,9 @@ static const struct ipu3_sensor supported_devices[] = {
 	IPU3_SENSOR("OVTI5648", "OVTI5648:00")
 };
 
-/*
-	{"INT33BE", {{"INT33BE:00", 0}, { }}},
-	{"OVTI2680", {{"OVTI2680:00", 0}, { }}},
-	{"OVTI5648", {{"OVTI5648:00", 0}, { }}},
-*/
+static struct software_node cio2_hid_node = { CIO2_HID, };
 
-struct software_node cio2_hid_node = { CIO2_HID, };
-
-struct cio2_bridge bridge = { 0, };
+static struct cio2_bridge bridge = { 0, };
 
 static const char * const port_names[] = {
 	"port0", "port1", "port2", "port3"
@@ -197,20 +190,20 @@ static void cio2_bridge_unregister_sensors(void)
 		fwnode_handle_put(sensor->fwnode);
 
 		device_release_driver(sensor->dev);
-		i2c_del_driver(sensor->new_drv);
+		i2c_del_driver(&sensor->new_drv);
 		i2c_add_driver(sensor->old_drv);
 		device_reprobe(sensor->dev);
 		put_device(sensor->dev);
-		kfree(sensor->new_drv);
 	}
 }
 
-static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
 /*
- * We have to reprobe the sensor, but having just overwritten the ACPI fwnode
+ * We have to reprobe the sensor in order for .probe() calls to be able to read
+ * the fwnode properties we set, but having just overwritten the ACPI fwnode
  * the usual matching won't work by default. We need to clone the existing
  * driver but add an i2c_device_id so the matching works.
  */
+static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
 {
 	struct i2c_client *client;
 	int ret;
@@ -218,19 +211,16 @@ static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
 	client = container_of(sensor->dev, struct i2c_client, dev);
 
 	sensor->old_drv = container_of(sensor->dev->driver, struct i2c_driver, driver);
-	sensor->new_drv = kmalloc(sizeof(*sensor->new_drv), GFP_KERNEL);
-	if (!sensor->new_drv)
-		return -ENOMEM;
 	
-	sensor->new_drv->driver.name = sensor->old_drv->driver.name;
-	sensor->new_drv->probe_new = sensor->old_drv->probe_new;
-	sensor->new_drv->remove = sensor->old_drv->remove;
-	sensor->new_drv->id_table = supported_devices[dev_idx].i2c_id;
+	sensor->new_drv.driver.name = sensor->old_drv->driver.name;
+	sensor->new_drv.probe_new = sensor->old_drv->probe_new;
+	sensor->new_drv.remove = sensor->old_drv->remove;
+	sensor->new_drv.id_table = supported_devices[dev_idx].i2c_id;
 
 	device_release_driver(sensor->dev);
 	i2c_del_driver(sensor->old_drv);
 
-	ret = i2c_add_driver(sensor->new_drv);
+	ret = i2c_add_driver(&sensor->new_drv);
 	if (ret)
 		goto err_replace_old_drv;
 
@@ -241,7 +231,7 @@ static int cio2_bridge_reprobe_sensor(struct sensor *sensor, int dev_idx)
 	return 0;
 
 err_remove_new_drv:
-	i2c_del_driver(sensor->new_drv);
+	i2c_del_driver(&sensor->new_drv);
 err_replace_old_drv:
 	i2c_add_driver(sensor->old_drv);
 
@@ -275,17 +265,14 @@ static int connect_supported_devices(void)
 		}
 
 		/*
-		 * We won't be able to reprobe() the sensor after our changes
-		 * here, so we rely on their probe() having completed.
+		 * We need to clone the driver of any sensors that we connect,
+		 * so if they're probing we need to wait until they're finished
 		 */
 
 		if (dev->links.status == DL_DEV_PROBING) {
 			ret = -EPROBE_DEFER;
 			goto err_free_dev;
 		}
-
-		pr_info("cio2-bridge: Found supported device %s\n",
-			supported_devices[i].hid);
 
 		sensor = &bridge.sensors[bridge.n_sensors];
 		sensor->dev = dev;
@@ -319,11 +306,8 @@ static int connect_supported_devices(void)
 		}
 
 		sd = dev_get_drvdata(dev);
-		if (!sd) {
-			pr_info("cio2-bridge: %s has no driver\n",
-				supported_devices[i].hid);
+		if (!sd)
 			goto err_free_swnodes;
-		}
 
 		fwnode->secondary = ERR_PTR(-ENODEV);
 		dev->fwnode = fwnode;
@@ -331,6 +315,9 @@ static int connect_supported_devices(void)
 		ret = cio2_bridge_reprobe_sensor(sensor, i);
 		if (ret)
 			goto err_free_swnodes;
+
+		pr_info("cio2-bridge: Found supported device %s\n",
+			supported_devices[i].hid);
 
 		bridge.n_sensors++;
 		continue;
@@ -369,14 +356,12 @@ int cio2_bridge_init(struct pci_dev *cio2)
 	ret = software_node_register(&cio2_hid_node);
 	if (ret < 0) {
 		pr_err("cio2-bridge: Failed to register the CIO2 HID node\n");
-		goto err_free_cio2;
+		goto err_put_cio2;
 	}
 
 	ret = connect_supported_devices();
-	if (ret == -EPROBE_DEFER) {
-		pr_info("cio2-bridge: deferring\n");
+	if (ret == -EPROBE_DEFER)
 		goto err_unregister_cio2;
-	}
 
 	if (bridge.n_sensors == 0) {
 		pr_info("cio2-bridge: Failed to connect any sensors\n");
@@ -410,7 +395,7 @@ err_unregister_sensors:
 	cio2_bridge_unregister_sensors();
 err_unregister_cio2:
 	software_node_unregister(&cio2_hid_node);
-err_free_cio2:
+err_put_cio2:
 	pci_dev_put(cio2);
 
 	return ret;
@@ -419,7 +404,6 @@ EXPORT_SYMBOL_GPL(cio2_bridge_init);
 
 void cio2_bridge_exit(struct pci_dev *cio2)
 {
-	/* Give the pci_dev its original fwnode back */
 	cio2->dev.fwnode = bridge.cio2_fwnode;
 	fwnode_handle_put(bridge.cio2_fwnode);
 	pci_dev_put(cio2);
@@ -428,6 +412,6 @@ void cio2_bridge_exit(struct pci_dev *cio2)
 
 	software_node_unregister(&cio2_hid_node);
 
-	memset(&bridge, 0, sizeof(struct cio2_bridge));
+//	memset(&bridge, 0, sizeof(struct cio2_bridge));
 }
 EXPORT_SYMBOL_GPL(cio2_bridge_exit);
