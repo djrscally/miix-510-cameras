@@ -180,6 +180,8 @@ static void cio2_power_exit(void)
 	regulator_unregister(cio2_power.dovdd);
 	gpiod_put(cio2_power.dovdd_gpiod);
 
+	gpiod_remove_lookup_table(&ov2680_gpios);
+
 	put_device(cio2_power.sensor);
 	acpi_dev_put(cio2_power.sensor_adev);
 	put_device(cio2_power.pmic);
