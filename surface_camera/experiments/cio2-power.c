@@ -79,7 +79,7 @@ static int cio2_power_register_regulators(struct device *pmic)
 	avdd_cfg.ena_gpiod = cio2_power.avdd_gpiod;
 	avdd_cfg.driver_data = cio2_power.avdd_gpiod;
 
-	cio2_power.avdd = devm_regulator_register(pmic, &regulators[0], &avdd_cfg);
+	cio2_power.avdd = regulator_register(&regulators[0], &avdd_cfg);
 	if (!cio2_power.avdd) {
 		pr_err("Failed to register AVDD\n");
 		ret = -EINVAL;
@@ -96,7 +96,7 @@ static int cio2_power_register_regulators(struct device *pmic)
 	dovdd_cfg.ena_gpiod = cio2_power.dovdd_gpiod;
 	dovdd_cfg.driver_data = cio2_power.dovdd_gpiod;
 
-	cio2_power.dovdd = devm_regulator_register(pmic, &regulators[1], &dovdd_cfg);
+	cio2_power.dovdd = regulator_register(&regulators[1], &dovdd_cfg);
 	if (!cio2_power.dovdd) {
 		pr_err("Failed to register DOVDD\n");
 		ret = -EINVAL;
