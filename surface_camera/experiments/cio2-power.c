@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
+#include <linux/regulator/machine.h>
 
 
 #define CIO2_GPIO_REGULATOR(_name, _id, _ops)			\
@@ -56,8 +57,24 @@ static const struct regulator_desc regulators[] = {
 static struct gpiod_lookup_table ov2680_gpios = {
 	.dev_id = "i2c-OVTI2680:00",
 	.table = {
-		GPIO_LOOKUP_IDX("gpiochip0", 120, "xshutdn", 0, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX("INT344B:00", 121, "xshutdn", 0, GPIO_ACTIVE_LOW),
 		{ },
+	},
+};
+
+static struct regulator_init_data avdd_init_data = {
+	.supply_regulator	= NULL,
+	.constraints = {
+		.name		= "avdd",
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+	},
+};
+
+static struct regulator_init_data dovdd_init_data = {
+	.supply_regulator	= NULL,
+	.constraints = {
+		.name		= "dovdd",
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 	},
 };
 
@@ -66,6 +83,9 @@ static int cio2_power_register_regulators(struct device *pmic)
 	struct regulator_config avdd_cfg = { };
 	struct regulator_config dovdd_cfg = { };
 	int ret;
+
+	avdd_cfg.init_data = &avdd_init_data;
+	dovdd_cfg.init_data = &dovdd_init_data;
 
 	avdd_cfg.dev = pmic;
 	dovdd_cfg.dev = pmic;

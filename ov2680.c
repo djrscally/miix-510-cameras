@@ -274,7 +274,7 @@ static int ov2680_configure_gpios(struct ov2680_device *ov2680)
 	int ret;
 
 	ov2680->xshutdn = gpiod_get_index(&ov2680->client->dev, "xshutdn", 0, GPIOD_OUT_HIGH);
-	if (!ov2680->xshutdn) {
+	if (IS_ERR(ov2680->xshutdn)) {
 		pr_err("Couldn't fetch xshutdn\n");
 		return -EINVAL;
 	}
@@ -1133,6 +1133,12 @@ static int ov2680_remove(struct i2c_client *client)
 	}
 
 	v4l2_device_unregister_subdev(sd);
+
+	ov2680_power_off(ov2680);
+
+	regulator_bulk_free(OV2680_NUM_SUPPLIES, ov2680->supplies);
+
+	gpiod_put(ov2680->xshutdn);	
 
 	return 0;
 }
