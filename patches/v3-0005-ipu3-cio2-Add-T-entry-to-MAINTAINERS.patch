@@ -1,0 +1,31 @@
+From 7faa9dd5a5781b03ff975987d8913ee60a4ff5e0 Mon Sep 17 00:00:00 2001
+From: Daniel Scally <djrscally@gmail.com>
+Date: Sat, 10 Oct 2020 23:11:36 +0100
+Subject: [RFC PATCH v3 5/9] ipu3-cio2: Add T: entry to MAINTAINERS
+
+Development for the ipu3-cio2 driver is taking place in media_tree, but
+there's no T: entry in MAINTAINERS to denote that - rectify that oversight
+
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
+---
+Changes in v3:
+	- patch introduced.
+	
+ MAINTAINERS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 43a025039..5d768d5ad 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -8851,6 +8851,7 @@ M:	Bingbu Cao <bingbu.cao@intel.com>
+ R:	Tianshu Qiu <tian.shu.qiu@intel.com>
+ L:	linux-media@vger.kernel.org
+ S:	Maintained
++T:	git git://linuxtv.org/media_tree.git
+ F:	Documentation/userspace-api/media/v4l/pixfmt-srggb10-ipu3.rst
+ F:	drivers/media/pci/intel/ipu3/
+ 
+-- 
+2.17.1
+

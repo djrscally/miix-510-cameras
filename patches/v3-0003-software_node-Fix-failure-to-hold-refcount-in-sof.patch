@@ -1,0 +1,34 @@
+From eafe68cde5db99390a4bb7f27be13b1c588d62c2 Mon Sep 17 00:00:00 2001
+From: Daniel Scally <djrscally@gmail.com>
+Date: Sat, 10 Oct 2020 23:42:09 +0100
+Subject: [RFC PATCH v3 3/9] software_node: Fix failure to hold refcount in
+ software_node_get_next_child
+
+The software_node_get_next_child() function currently does not hold a kref
+to the child software_node; fix that.
+
+Fixes: 59abd83672f7 ("drivers: base: Introducing software nodes to the firmware node framework")
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
+---
+Changes in v3:
+	- split out from the full software_node_graph*() patch
+
+ drivers/base/swnode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
+index f01b1cc61..741149b90 100644
+--- a/drivers/base/swnode.c
++++ b/drivers/base/swnode.c
+@@ -450,7 +450,7 @@ software_node_get_next_child(const struct fwnode_handle *fwnode,
+ 		c = list_next_entry(c, entry);
+ 	else
+ 		c = list_first_entry(&p->children, struct swnode, entry);
+-	return &c->fwnode;
++	return software_node_get(&c->fwnode);
+ }
+ 
+ static struct fwnode_handle *
+-- 
+2.17.1
+

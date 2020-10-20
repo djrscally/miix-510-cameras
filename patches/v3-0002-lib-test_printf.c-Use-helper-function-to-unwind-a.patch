@@ -1,0 +1,36 @@
+From 2d1c1c1e5ebc12acc7b18c9e46eba86092638c81 Mon Sep 17 00:00:00 2001
+From: Daniel Scally <djrscally@gmail.com>
+Date: Sat, 10 Oct 2020 23:07:22 +0100
+Subject: [RFC PATCH v3 2/9] lib/test_printf.c: Use helper function to unwind
+ array of software_nodes
+
+Use the new software_node_unregister_nodes_reverse() function to
+unwind this array in a cleaner way.
+
+Suggested-by: Andriy Shevchenko <andriy.shevchenko@linux.intel.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
+---
+Changes in v3:
+	- patch introduced.
+
+ lib/test_printf.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/lib/test_printf.c b/lib/test_printf.c
+index 7ac87f18a..c63365570 100644
+--- a/lib/test_printf.c
++++ b/lib/test_printf.c
+@@ -644,9 +644,7 @@ static void __init fwnode_pointer(void)
+ 	test(second_name, "%pfwP", software_node_fwnode(&softnodes[1]));
+ 	test(third_name, "%pfwP", software_node_fwnode(&softnodes[2]));
+ 
+-	software_node_unregister(&softnodes[2]);
+-	software_node_unregister(&softnodes[1]);
+-	software_node_unregister(&softnodes[0]);
++	software_node_unregister_nodes_reverse(softnodes);
+ }
+ 
+ static void __init
+-- 
+2.17.1
+

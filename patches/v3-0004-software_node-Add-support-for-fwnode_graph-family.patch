@@ -1,8 +1,8 @@
-From d2dbb4c91d29945b7f815d679216aeb1fbbff8f6 Mon Sep 17 00:00:00 2001
+From 3686a3bf83c1889f2cc01ec6598c20f719cadd8e Mon Sep 17 00:00:00 2001
 From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
 Date: Tue, 15 Sep 2020 15:47:46 +0100
-Subject: [PATCH v2] software_node: Add support for fwnode_graph*() family of
- functions
+Subject: [RFC PATCH v3 4/9] software_node: Add support for fwnode_graph*()
+ family of functions
 
 This implements the remaining .graph_* callbacks in the
 fwnode operations vector for the software nodes. That makes
@@ -25,6 +25,13 @@ Signed-off-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
 Co-developed-by: Daniel Scally <djrscally@gmail.com>
 Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
+changes in v3:
+	- removed software_node_device_is_available
+	- moved the change to software_node_get_next_child to a separate
+	patch
+	- switched to use fwnode_handle_put() in graph_get_next_endpoint()
+	instead of software_node_put()
+
 changes in v2:
 	- added software_node_device_is_available
 	- altered software_node_get_next_child to get references
@@ -33,36 +40,14 @@ changes in v2:
 	software_node_get_next_child
 	- altered swnode_graph_find_next_port to release port rather than
 	old
-	
- drivers/base/swnode.c | 129 +++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 127 insertions(+), 2 deletions(-)
+ drivers/base/swnode.c | 120 +++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 119 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
-index 010828fc785b..d69034b807e3 100644
+index 741149b90..3732530ce 100644
 --- a/drivers/base/swnode.c
 +++ b/drivers/base/swnode.c
-@@ -363,6 +363,11 @@ static void software_node_put(struct fwnode_handle *fwnode)
- 	kobject_put(&swnode->kobj);
- }
- 
-+static bool software_node_device_is_available(const struct fwnode_handle *fwnode)
-+{
-+	return is_software_node(fwnode);
-+}
-+
- static bool software_node_property_present(const struct fwnode_handle *fwnode,
- 					   const char *propname)
- {
-@@ -450,7 +455,7 @@ software_node_get_next_child(const struct fwnode_handle *fwnode,
- 		c = list_next_entry(c, entry);
- 	else
- 		c = list_first_entry(&p->children, struct swnode, entry);
--	return &c->fwnode;
-+	return software_node_get(&c->fwnode);
- }
- 
- static struct fwnode_handle *
-@@ -536,9 +541,125 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
+@@ -536,6 +536,120 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
  	return 0;
  }
  
@@ -107,7 +92,6 @@ index 010828fc785b..d69034b807e3 100644
 +	}
 +
 +	for (; port; port = swnode_graph_find_next_port(parent, port)) {
-+
 +		if (old) {
 +			parent_of_old = software_node_get_parent(old);
 +
@@ -126,7 +110,7 @@ index 010828fc785b..d69034b807e3 100644
 +	}
 +
 +	fwnode_handle_put(port);
-+	software_node_put(parent);
++	fwnode_handle_put(parent);
 +
 +	return endpoint;
 +}
@@ -184,11 +168,7 @@ index 010828fc785b..d69034b807e3 100644
  static const struct fwnode_operations software_node_ops = {
  	.get = software_node_get,
  	.put = software_node_put,
-+	.device_is_available = software_node_device_is_available,
- 	.property_present = software_node_property_present,
- 	.property_read_int_array = software_node_read_int_array,
- 	.property_read_string_array = software_node_read_string_array,
-@@ -547,7 +668,11 @@ static const struct fwnode_operations software_node_ops = {
+@@ -547,7 +661,11 @@ static const struct fwnode_operations software_node_ops = {
  	.get_parent = software_node_get_parent,
  	.get_next_child_node = software_node_get_next_child,
  	.get_named_child_node = software_node_get_named_child_node,
