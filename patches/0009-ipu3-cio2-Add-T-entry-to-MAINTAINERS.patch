@@ -1,24 +1,21 @@
-From 7faa9dd5a5781b03ff975987d8913ee60a4ff5e0 Mon Sep 17 00:00:00 2001
+From 75efa16f5b2efd1e8c61fbc25864b19e0246d05b Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sat, 10 Oct 2020 23:11:36 +0100
-Subject: [RFC PATCH v3 5/9] ipu3-cio2: Add T: entry to MAINTAINERS
+Subject: [PATCH 09/13] ipu3-cio2: Add T: entry to MAINTAINERS
 
 Development for the ipu3-cio2 driver is taking place in media_tree, but
 there's no T: entry in MAINTAINERS to denote that - rectify that oversight
 
-Signed-off-by: Daniel Scally <djrscally@gmail.com>
+Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
-Changes in v3:
-	- patch introduced.
-	
  MAINTAINERS | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 43a025039..5d768d5ad 100644
+index 811db1d3ca33..1a955a722e4e 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -8851,6 +8851,7 @@ M:	Bingbu Cao <bingbu.cao@intel.com>
+@@ -8930,6 +8930,7 @@ M:	Bingbu Cao <bingbu.cao@intel.com>
  R:	Tianshu Qiu <tian.shu.qiu@intel.com>
  L:	linux-media@vger.kernel.org
  S:	Maintained
@@ -27,5 +24,5 @@ index 43a025039..5d768d5ad 100644
  F:	drivers/media/pci/intel/ipu3/
  
 -- 
-2.17.1
+2.25.1
 
