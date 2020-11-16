@@ -1,8 +1,10 @@
-From 3686a3bf83c1889f2cc01ec6598c20f719cadd8e Mon Sep 17 00:00:00 2001
+From ba8d6544e85837fb8657b6607f9895c69fe13423 Mon Sep 17 00:00:00 2001
 From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
 Date: Tue, 15 Sep 2020 15:47:46 +0100
-Subject: [RFC PATCH v3 4/9] software_node: Add support for fwnode_graph*()
- family of functions
+Subject: [PATCH 07/13] software_node: Add support for fwnode_graph*() family
+ of functions
+
+From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
 
 This implements the remaining .graph_* callbacks in the
 fwnode operations vector for the software nodes. That makes
@@ -19,35 +21,18 @@ also be grouped under a specially named "ports" subnode,
 just like in DT, if necessary.
 
 The remote-endpoints are reference properties under the
-endpoint nodes that are named "remote-endpoint". 
+endpoint nodes that are named "remote-endpoint".
 
-Signed-off-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
-Co-developed-by: Daniel Scally <djrscally@gmail.com>
-Signed-off-by: Daniel Scally <djrscally@gmail.com>
+Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
-changes in v3:
-	- removed software_node_device_is_available
-	- moved the change to software_node_get_next_child to a separate
-	patch
-	- switched to use fwnode_handle_put() in graph_get_next_endpoint()
-	instead of software_node_put()
-
-changes in v2:
-	- added software_node_device_is_available
-	- altered software_node_get_next_child to get references
-	- altered software_node_get_next_endpoint to release references
-	to ports and avoid passing invalid combinations of swnodes to
-	software_node_get_next_child
-	- altered swnode_graph_find_next_port to release port rather than
-	old
- drivers/base/swnode.c | 120 +++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 119 insertions(+), 1 deletion(-)
+ drivers/base/swnode.c | 118 +++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 117 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
-index 741149b90..3732530ce 100644
+index 79e5d91b7ed5..e72846ad606a 100644
 --- a/drivers/base/swnode.c
 +++ b/drivers/base/swnode.c
-@@ -536,6 +536,120 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
+@@ -540,6 +540,118 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
  	return 0;
  }
  
@@ -60,7 +45,6 @@ index 741149b90..3732530ce 100644
 +	while ((port = software_node_get_next_child(parent, old))) {
 +		if (!strncmp(to_swnode(port)->node->name, "port", 4))
 +			return port;
-+		fwnode_handle_put(port);
 +		old = port;
 +	}
 +
@@ -102,7 +86,6 @@ index 741149b90..3732530ce 100644
 +		}
 +
 +		endpoint = software_node_get_next_child(port, old);
-+		fwnode_handle_put(old);
 +		if (endpoint)
 +			break;
 +
@@ -168,7 +151,7 @@ index 741149b90..3732530ce 100644
  static const struct fwnode_operations software_node_ops = {
  	.get = software_node_get,
  	.put = software_node_put,
-@@ -547,7 +661,11 @@ static const struct fwnode_operations software_node_ops = {
+@@ -551,7 +663,11 @@ static const struct fwnode_operations software_node_ops = {
  	.get_parent = software_node_get_parent,
  	.get_next_child_node = software_node_get_next_child,
  	.get_named_child_node = software_node_get_named_child_node,
@@ -182,5 +165,5 @@ index 741149b90..3732530ce 100644
  
  /* -------------------------------------------------------------------------- */
 -- 
-2.17.1
+2.25.1
 

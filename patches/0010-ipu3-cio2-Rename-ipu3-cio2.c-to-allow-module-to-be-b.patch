@@ -1,24 +1,22 @@
-From 397828103212e735640b0c2dfa082a87a4a8ad69 Mon Sep 17 00:00:00 2001
+From b519ea2a832c19b444505673c5d30facee1b7710 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sat, 10 Oct 2020 22:47:21 +0100
-Subject: [RFC PATCH v3 6/9] ipu3-cio2: Rename ipu3-cio2.c to allow module to
- be built from multiple sources files retaining ipu3-cio2 name
+Subject: [PATCH 10/13] ipu3-cio2: Rename ipu3-cio2.c to allow module to be
+ built from multiple source files retaining ipu3-cio2 name
 
 ipu3-cio2 driver needs extending with multiple files; rename the main
 source file and specify the renamed file in Makefile to accommodate that.
 
-Signed-off-by: Daniel Scally <djrscally@gmail.com>
+Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
+Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
-Changes in v3:
-	- patch introduced
-
  drivers/media/pci/intel/ipu3/Makefile                          | 2 ++
  drivers/media/pci/intel/ipu3/{ipu3-cio2.c => ipu3-cio2-main.c} | 0
  2 files changed, 2 insertions(+)
  rename drivers/media/pci/intel/ipu3/{ipu3-cio2.c => ipu3-cio2-main.c} (100%)
 
 diff --git a/drivers/media/pci/intel/ipu3/Makefile b/drivers/media/pci/intel/ipu3/Makefile
-index 98ddd5bea..b4e3266d9 100644
+index 98ddd5beafe0..429d516452e4 100644
 --- a/drivers/media/pci/intel/ipu3/Makefile
 +++ b/drivers/media/pci/intel/ipu3/Makefile
 @@ -1,2 +1,4 @@
@@ -26,11 +24,10 @@ index 98ddd5bea..b4e3266d9 100644
  obj-$(CONFIG_VIDEO_IPU3_CIO2) += ipu3-cio2.o
 +
 +ipu3-cio2-y += ipu3-cio2-main.o
-\ No newline at end of file
 diff --git a/drivers/media/pci/intel/ipu3/ipu3-cio2.c b/drivers/media/pci/intel/ipu3/ipu3-cio2-main.c
 similarity index 100%
 rename from drivers/media/pci/intel/ipu3/ipu3-cio2.c
 rename to drivers/media/pci/intel/ipu3/ipu3-cio2-main.c
 -- 
-2.17.1
+2.25.1
 

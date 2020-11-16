@@ -1,24 +1,21 @@
-From 7097bb685aa13f9ceed55c11fdccdd4b33da4b37 Mon Sep 17 00:00:00 2001
+From 8f038771e9075ec372568913691cfc9cc3d48578 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
-Date: Tue, 13 Oct 2020 11:04:10 +0100
-Subject: [RFC PATCH v3 8/9] media: v4l2-core: v4l2-async: Check possible match
- in match_fwnode based on sd->fwnode->secondary
+Date: Wed, 21 Oct 2020 21:53:05 +0100
+Subject: [PATCH 11/13] media: v4l2-core: v4l2-async: Check possible match in
+ match_fwnode based on sd->fwnode->secondary
 
 Where the fwnode graph is comprised of software_nodes, these will be
 assigned as the secondary to dev->fwnode. Check the v4l2_subdev's fwnode
 for a secondary and attempt to match against it during match_fwnode() to
 accommodate that possibility.
 
-Signed-off-by: Daniel Scally <djrscally@gmail.com>
+Signed-off-by: Dan Scally <djrscally@gmail.com>
 ---
-Changes in v3:
-	- patch introduced
-
  drivers/media/v4l2-core/v4l2-async.c | 8 ++++++++
  1 file changed, 8 insertions(+)
 
 diff --git a/drivers/media/v4l2-core/v4l2-async.c b/drivers/media/v4l2-core/v4l2-async.c
-index e3ab003a6..6486dbde7 100644
+index e3ab003a6c85..6486dbde784f 100644
 --- a/drivers/media/v4l2-core/v4l2-async.c
 +++ b/drivers/media/v4l2-core/v4l2-async.c
 @@ -87,6 +87,14 @@ static bool match_fwnode(struct v4l2_async_notifier *notifier,
@@ -37,5 +34,5 @@ index e3ab003a6..6486dbde7 100644
  	 * Otherwise, check if the sd fwnode and the asd fwnode refer to an
  	 * endpoint or a device. If they're of the same type, there's no match.
 -- 
-2.17.1
+2.25.1
 
