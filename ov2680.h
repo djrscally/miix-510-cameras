@@ -173,7 +173,7 @@ struct ov2680_device {
 	u32								clk_freq;
 	const struct ov2680_mode_info	*current_mode;
 
-	struct gpio_desc				*xshutdn;
+	struct gpio_desc				*reset;
 
 	/* Miscellaneous gubbins */
 	struct mutex					lock;

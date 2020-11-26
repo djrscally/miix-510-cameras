@@ -273,14 +273,14 @@ static int ov2680_configure_gpios(struct ov2680_device *ov2680)
 {
 	int ret;
 
-	ov2680->xshutdn = gpiod_get_index(&ov2680->client->dev, "xshutdn", 0, GPIOD_OUT_HIGH);
-	if (IS_ERR(ov2680->xshutdn)) {
-		pr_err("Couldn't fetch xshutdn\n");
+	ov2680->reset = gpiod_get_index(&ov2680->client->dev, "reset", 0, GPIOD_OUT_HIGH);
+	if (IS_ERR(ov2680->reset)) {
+		pr_err("Couldn't fetch reset\n");
 		return -EINVAL;
 	}
 
 	/* pull both pins low initially */
-	// gpiod_set_value_cansleep(ov2680->xshutdn, 0);
+	// gpiod_set_value_cansleep(ov2680->reset, 0);
 
 	return 0;
 }
@@ -1138,7 +1138,7 @@ static int ov2680_remove(struct i2c_client *client)
 
 	regulator_bulk_free(OV2680_NUM_SUPPLIES, ov2680->supplies);
 
-	gpiod_put(ov2680->xshutdn);	
+	gpiod_put(ov2680->reset);	
 
 	return 0;
 }
