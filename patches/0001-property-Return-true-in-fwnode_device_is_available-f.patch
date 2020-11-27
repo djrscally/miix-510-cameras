@@ -1,7 +1,7 @@
-From cd52f04ae4aeef71ccf9fecb64f9095a758478a4 Mon Sep 17 00:00:00 2001
+From 5643903390efdb552b4eadca52f81ae3d72b23e6 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sat, 24 Oct 2020 22:42:28 +0100
-Subject: [PATCH 01/13] property: Return true in fwnode_device_is_available for
+Subject: [PATCH 01/18] property: Return true in fwnode_device_is_available for
  node types that do not implement this operation
 
 Some types of fwnode_handle do not implement the device_is_available()
@@ -11,7 +11,7 @@ actually exist, so if the check isn't implemented just assume that the
 "device" is present.
 
 Suggested-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/base/property.c | 5 +++++
  1 file changed, 5 insertions(+)

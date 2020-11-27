@@ -1,14 +1,14 @@
-From 76a5e88cf4c2e6ecc3aaf07f2eed32218377aeff Mon Sep 17 00:00:00 2001
+From 535ce24316ba126a2285d66c35c6595e195204a7 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sat, 10 Oct 2020 23:07:22 +0100
-Subject: [PATCH 08/13] lib/test_printf.c: Use helper function to unwind array
+Subject: [PATCH 08/18] lib/test_printf.c: Use helper function to unwind array
  of software_nodes
 
 Use the software_node_unregister_nodes() helper function to unwind this
 array in a cleaner way.
 
 Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  lib/test_printf.c | 4 +---
  1 file changed, 1 insertion(+), 3 deletions(-)

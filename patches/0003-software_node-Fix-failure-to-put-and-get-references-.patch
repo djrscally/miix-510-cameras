@@ -1,14 +1,14 @@
-From 867999024a1574415542a6b57aeb231f35137afe Mon Sep 17 00:00:00 2001
+From 8f1bc03fbe235fd8c5a4072c0b24982c2560b244 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sat, 10 Oct 2020 23:42:09 +0100
-Subject: [PATCH 03/13] software_node: Fix failure to put() and get()
+Subject: [PATCH 03/18] software_node: Fix failure to put() and get()
  references to children in software_node_get_next_child()
 
 The software_node_get_next_child() function currently does not hold
 references to the child software_node that it finds or put the ref that
 is held against the old child - fix that.
 
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/base/swnode.c | 8 ++++++--
  1 file changed, 6 insertions(+), 2 deletions(-)

@@ -1,7 +1,7 @@
-From 6f171d03b38f7f160156b7b852b62a426c9341dc Mon Sep 17 00:00:00 2001
+From b83105ec6c1609f050229c662b4982d5d934c268 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Sun, 25 Oct 2020 22:49:08 +0000
-Subject: [PATCH 04/13] software_node: Enforce parent before child ordering of
+Subject: [PATCH 04/18] software_node: Enforce parent before child ordering of
  nodes array for software_node_register_nodes()
 
 Registering software_nodes with the .parent member set to point to a
@@ -9,7 +9,7 @@ currently unregistered software_node has the potential for problems,
 so enforce parent -> child ordering in arrays passed to this function.
 
 Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/base/swnode.c | 15 +++++++++++----
  1 file changed, 11 insertions(+), 4 deletions(-)

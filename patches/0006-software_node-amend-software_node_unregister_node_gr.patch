@@ -1,7 +1,7 @@
-From 52d041bcd68d1a52b5bf61754233f2acb85a6be3 Mon Sep 17 00:00:00 2001
+From b8d1de4284b6fa35b5e04a616bcc6bc5afa3c213 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Wed, 21 Oct 2020 22:25:03 +0100
-Subject: [PATCH 06/13] software_node: amend
+Subject: [PATCH 06/18] software_node: amend
  software_node_unregister_node_group() to perform unregistration of array in
  reverse order to be consistent with software_node_unregister_nodes()
 
@@ -10,7 +10,7 @@ the order in which the software_node_unregister_node_group() function
 unregisters nodes.
 
 Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/base/swnode.c | 5 ++++-
  1 file changed, 4 insertions(+), 1 deletion(-)

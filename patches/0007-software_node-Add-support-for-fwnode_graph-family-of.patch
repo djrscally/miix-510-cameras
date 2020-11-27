@@ -1,7 +1,7 @@
-From f30e06137de9559b4f106fb04ce3de2b012c803e Mon Sep 17 00:00:00 2001
+From ce0f42baaa3e571e1ddcfc764825a8f4bc851ad0 Mon Sep 17 00:00:00 2001
 From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
 Date: Tue, 15 Sep 2020 15:47:46 +0100
-Subject: [PATCH 07/13] software_node: Add support for fwnode_graph*() family
+Subject: [PATCH 07/18] software_node: Add support for fwnode_graph*() family
  of functions
 
 From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
@@ -23,16 +23,18 @@ just like in DT, if necessary.
 The remote-endpoints are reference properties under the
 endpoint nodes that are named "remote-endpoint".
 
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Co-developed-by: Daniel Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
- drivers/base/swnode.c | 111 +++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 110 insertions(+), 1 deletion(-)
+ drivers/base/swnode.c | 110 +++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 109 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/base/swnode.c b/drivers/base/swnode.c
-index 9bd0bb77ad5b..4cb91fe9455f 100644
+index 9bd0bb77ad5b..0c7a8d6b9ea8 100644
 --- a/drivers/base/swnode.c
 +++ b/drivers/base/swnode.c
-@@ -540,6 +540,111 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
+@@ -540,6 +540,110 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
  	return 0;
  }
  
@@ -75,7 +77,6 @@ index 9bd0bb77ad5b..4cb91fe9455f 100644
 +	}
 +
 +	for (; port; port = swnode_graph_find_next_port(parent, port)) {
-+
 +		endpoint = software_node_get_next_child(port, old);
 +		if (endpoint) {
 +			fwnode_handle_put(port);
@@ -144,7 +145,7 @@ index 9bd0bb77ad5b..4cb91fe9455f 100644
  static const struct fwnode_operations software_node_ops = {
  	.get = software_node_get,
  	.put = software_node_put,
-@@ -551,7 +656,11 @@ static const struct fwnode_operations software_node_ops = {
+@@ -551,7 +655,11 @@ static const struct fwnode_operations software_node_ops = {
  	.get_parent = software_node_get_parent,
  	.get_next_child_node = software_node_get_next_child,
  	.get_named_child_node = software_node_get_named_child_node,

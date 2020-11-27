@@ -1,7 +1,7 @@
-From 6db8b3159f0ac148a878c9b9bfa164c824779cf7 Mon Sep 17 00:00:00 2001
+From 15954929813500d808a8b5ac4df75d6a342d0fbe Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Wed, 21 Oct 2020 22:16:38 +0100
-Subject: [PATCH 05/13] software_node: Alter software_node_unregister_nodes()
+Subject: [PATCH 05/18] software_node: Alter software_node_unregister_nodes()
  to unregister the array in reverse order
 
 Software nodes that are children of another software node should be
@@ -10,7 +10,7 @@ of software_nodes ordered parent to child, reverse the order in which
 this function unregisters software_nodes.
 
 Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/base/swnode.c | 19 ++++++++++++-------
  1 file changed, 12 insertions(+), 7 deletions(-)

@@ -1,7 +1,7 @@
-From 815a450d03e862c8547334f4c4d134beee45e5ff Mon Sep 17 00:00:00 2001
+From 7acf4cc7561af950f3e12a39f89d2239a90e8a68 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Wed, 21 Oct 2020 21:53:05 +0100
-Subject: [PATCH 11/13] media: v4l2-core: v4l2-async: Check possible match in
+Subject: [PATCH 11/18] media: v4l2-core: v4l2-async: Check possible match in
  match_fwnode based on sd->fwnode->secondary
 
 Where the fwnode graph is comprised of software_nodes, these will be
@@ -9,7 +9,7 @@ assigned as the secondary to dev->fwnode. Check the v4l2_subdev's fwnode
 for a secondary and attempt to match against it during match_fwnode() to
 accommodate that possibility.
 
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/media/v4l2-core/v4l2-async.c | 8 ++++++++
  1 file changed, 8 insertions(+)

@@ -1,18 +1,18 @@
-From fe5d3f73e2cc2ccde7ebbaba186c4169c9c90095 Mon Sep 17 00:00:00 2001
-From: Dan Scally <djrscally@gmail.com>
+From db7a4ba35414653547a4ac2f20b389732eb75e0d Mon Sep 17 00:00:00 2001
+From: Daniel Scally <djrscally@gmail.com>
 Date: Sun, 15 Nov 2020 08:15:34 +0000
-Subject: [PATCH 12/13] acpi: Add acpi_dev_get_next_match_dev() and macro to
+Subject: [PATCH 12/18] acpi: Add acpi_dev_get_next_match_dev() and macro to
  iterate through acpi_devices matching a given _HID
 
 To ensure we handle situations in which multiple sensors of the same
 model (and therefore _HID) are present in a system, we need to be able
 to iterate over devices matching a known _HID but unknown _UID and _HRV
- - add acpi_dev_get_next_match_dev() to accomodate that possibility and
+ - add acpi_dev_get_next_match_dev() to accommodate that possibility and
 change acpi_dev_get_first_match_dev() to simply call the new function
 with a NULL starting point. Add an iterator macro for convenience.
 
 Suggested-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
-Signed-off-by: Dan Scally <djrscally@gmail.com>
+Signed-off-by: Daniel Scally <djrscally@gmail.com>
 ---
  drivers/acpi/utils.c    | 30 ++++++++++++++++++++++++++----
  include/acpi/acpi_bus.h |  7 +++++++
@@ -81,7 +81,7 @@ index d5411a166685..c177165c8db2 100644
  
  /*
 diff --git a/include/acpi/acpi_bus.h b/include/acpi/acpi_bus.h
-index a3abcc4b7d9f..4a9dd723304e 100644
+index a3abcc4b7d9f..0a028ba967d3 100644
 --- a/include/acpi/acpi_bus.h
 +++ b/include/acpi/acpi_bus.h
 @@ -688,9 +688,16 @@ static inline bool acpi_device_can_poweroff(struct acpi_device *adev)
@@ -94,9 +94,9 @@ index a3abcc4b7d9f..4a9dd723304e 100644
  acpi_dev_get_first_match_dev(const char *hid, const char *uid, s64 hrv);
  
 +#define for_each_acpi_dev_match(adev, hid, uid, hrv)			\
-+   for (adev = acpi_dev_get_first_match_dev(hid, uid, hrv);		\
-+        adev;								\
-+        adev = acpi_dev_get_next_match_dev(adev, hid, uid, hrv))
++	for (adev = acpi_dev_get_first_match_dev(hid, uid, hrv);	\
++	     adev;							\
++	     adev = acpi_dev_get_next_match_dev(adev, hid, uid, hrv))
 +
  static inline void acpi_dev_put(struct acpi_device *adev)
  {

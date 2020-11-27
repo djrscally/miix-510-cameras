@@ -1,0 +1,30 @@
+From fa8c2de3fa71c80312b427867b7946e9f491f315 Mon Sep 17 00:00:00 2001
+From: Dan Scally <djrscally@gmail.com>
+Date: Mon, 16 Nov 2020 21:45:22 +0000
+Subject: [PATCH 16/18] i2c: i2c-core-base: Use the new i2c_acpi_dev_name() in
+ i2c_set_dev_name()
+
+To make sure the new i2c_acpi_dev_name() always reflects the name of i2c
+devices sourced from ACPI, use it in i2c_set_dev_name().
+
+Signed-off-by: Dan Scally <djrscally@gmail.com>
+---
+ drivers/i2c/i2c-core-base.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/i2c-core-base.c b/drivers/i2c/i2c-core-base.c
+index 573b5da145d1..a6d4ceb01077 100644
+--- a/drivers/i2c/i2c-core-base.c
++++ b/drivers/i2c/i2c-core-base.c
+@@ -814,7 +814,7 @@ static void i2c_dev_set_name(struct i2c_adapter *adap,
+ 	}
+ 
+ 	if (adev) {
+-		dev_set_name(&client->dev, "i2c-%s", acpi_dev_name(adev));
++		dev_set_name(&client->dev, i2c_acpi_dev_name(adev));
+ 		return;
+ 	}
+ 
+-- 
+2.25.1
+
