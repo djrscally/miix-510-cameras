@@ -1,4 +1,4 @@
-From 3454e6c1b6ec3ae2b07618a09e4b831522b3277e Mon Sep 17 00:00:00 2001
+From 3742cfc92cc98162118c9c67109c460c5815ad42 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Fri, 27 Nov 2020 10:18:10 +0000
 Subject: [PATCH 18/18] ipu3: Add driver for dummy INT3472 ACPI device
@@ -15,9 +15,9 @@ Signed-off-by: Daniel Scally <djrscally@gmail.com>
  MAINTAINERS                            |   7 +
  drivers/media/pci/intel/ipu3/Kconfig   |  14 +
  drivers/media/pci/intel/ipu3/Makefile  |   1 +
- drivers/media/pci/intel/ipu3/int3472.c | 366 +++++++++++++++++++++++++
+ drivers/media/pci/intel/ipu3/int3472.c | 374 +++++++++++++++++++++++++
  drivers/media/pci/intel/ipu3/int3472.h |  96 +++++++
- 5 files changed, 484 insertions(+)
+ 5 files changed, 492 insertions(+)
  create mode 100644 drivers/media/pci/intel/ipu3/int3472.c
  create mode 100644 drivers/media/pci/intel/ipu3/int3472.h
 
@@ -74,10 +74,10 @@ index 933777e6ea8a..2285947b2bd2 100644
  ipu3-cio2-$(CONFIG_CIO2_BRIDGE) += cio2-bridge.o
 diff --git a/drivers/media/pci/intel/ipu3/int3472.c b/drivers/media/pci/intel/ipu3/int3472.c
 new file mode 100644
-index 000000000000..3134171d7e06
+index 000000000000..73e39833aff2
 --- /dev/null
 +++ b/drivers/media/pci/intel/ipu3/int3472.c
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,374 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Author: Dan Scally <djrscally@gmail.com> */
 +#include <linux/acpi.h>
@@ -124,10 +124,11 @@ index 000000000000..3134171d7e06
 +		return -ENODEV;
 +
 +	table_entry = (struct gpiod_lookup)GPIO_LOOKUP_IDX(acpi_dev_name(adev),
-+							   ares->data.gpio.pin_table[0], func, 0,
-+							   GPIO_ACTIVE_HIGH);
++							   ares->data.gpio.pin_table[0],
++							   func, 0, GPIO_ACTIVE_HIGH);
 +
-+	memcpy(&int3472->gpios.table[int3472->n_sensor_gpios], &table_entry, sizeof(table_entry));
++	memcpy(&int3472->gpios.table[int3472->n_sensor_gpios], &table_entry,
++	       sizeof(table_entry));
 +	int3472->n_sensor_gpios++;
 +
 +	return 0;
@@ -186,6 +187,10 @@ index 000000000000..3134171d7e06
 +	struct regulator_config cfg = { };
 +	int ret;
 +
++        /*
++         * We lookup supply names from machine specific tables, based on a
++         * unique identifier in the sensor's _DSM
++         */
 +	regulator_map = int3472_get_sensor_supply_map(int3472);
 +	if (IS_ERR_OR_NULL(regulator_map)) {
 +		dev_err(&int3472->sensor->dev,
@@ -194,7 +199,8 @@ index 000000000000..3134171d7e06
 +	}
 +
 +	if (int3472->n_regulators >= regulator_map->n_supplies) {
-+		dev_err(&int3472->sensor->dev, "All known supplies are already mapped\n");
++		dev_err(&int3472->sensor->dev,
++			"All known supplies are already mapped\n");
 +		return -EINVAL;
 +	}
 +
@@ -246,7 +252,8 @@ index 000000000000..3134171d7e06
 +	return PTR_ERR(regulator->rdev);
 +}
 +
-+static int int3472_handle_gpio_resources(struct acpi_resource *ares, void *data)
++static int int3472_handle_gpio_resources(struct acpi_resource *ares,
++					 void *data)
 +{
 +	struct int3472_device *int3472 = data;
 +	union acpi_object *obj;
@@ -257,8 +264,8 @@ index 000000000000..3134171d7e06
 +		return EINVAL; /* Deliberately positive */
 +
 +	/*
-+	 * n_gpios + 2 because the index of this _DSM function is 1-based and the
-+	 * first function is just a count.
++	 * n_gpios + 2 because the index of this _DSM function is 1-based and
++	 * the first function is just a count.
 +	 */
 +	obj = acpi_evaluate_dsm_typed(int3472->adev->handle,
 +				      &int3472_gpio_guid, 0x00,
@@ -266,11 +273,12 @@ index 000000000000..3134171d7e06
 +				      NULL, ACPI_TYPE_INTEGER);
 +
 +	if (!obj) {
-+		dev_warn(&int3472->adev->dev, "No _DSM entry for this GPIO pin\n");
++		dev_warn(&int3472->adev->dev,
++			 "No _DSM entry for this GPIO pin\n");
 +		return ENODEV;
 +	}
 +
-+	switch (obj->integer.value & 0xff) { /* low byte holds type information */
++	switch (obj->integer.value & 0xff) { /* low byte holds type data */
 +	case 0x00: /* Purpose unclear, possibly a reset GPIO pin */
 +		ret = int3472_map_gpio_to_sensor(int3472, ares, "reset");
 +		break;
@@ -287,7 +295,7 @@ index 000000000000..3134171d7e06
 +	default:
 +		/* if we've gotten here, we're not sure what they are yet */
 +		dev_warn(&int3472->adev->dev,
-+			 "GPIO type 0x%02x not known; the sensor may not function\n",
++			 "GPIO type 0x%llx unknown; the sensor may not work\n",
 +			 (obj->integer.value & 0xff));
 +		ret = EINVAL;
 +	}
@@ -364,7 +372,7 @@ index 000000000000..3134171d7e06
 +		goto out_free_buff;
 +	}
 +
-+	/* Space for 3 GPIOs - one more than we've seen so far plus a null */
++	/* Space for 4 GPIOs - one more than we've seen so far plus a null */
 +	int3472 = kzalloc(sizeof(*int3472) +
 +			 ((INT3472_MAX_SENSOR_GPIOS + 1) * sizeof(struct gpiod_lookup)),
 +			 GFP_KERNEL);
@@ -379,7 +387,7 @@ index 000000000000..3134171d7e06
 +	int3472->sensor = acpi_dev_get_next_dep_dev(adev, NULL);
 +	if (!int3472->sensor) {
 +		dev_err(&adev->dev,
-+			"This INT3472 entry seems to have no dependent.\n");
++			"This INT3472 entry seems to have no dependents.\n");
 +		ret = -ENODEV;
 +		goto out_free_int3472;
 +	}
