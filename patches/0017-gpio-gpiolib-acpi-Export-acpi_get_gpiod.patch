@@ -1,4 +1,4 @@
-From 8dbd8348d2305f4049a263e49dd9cbc5519cfb22 Mon Sep 17 00:00:00 2001
+From e545670f7ae54708fa63ac47cb0d6d07e0145d3e Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Mon, 16 Nov 2020 00:16:56 +0000
 Subject: [PATCH 17/18] gpio: gpiolib-acpi: Export acpi_get_gpiod()

@@ -1,4 +1,4 @@
-From 4f76d013c243459de1cf893d5162d87c6ca10e90 Mon Sep 17 00:00:00 2001
+From 65d079b1414c5da0222c186712becc5e2341edc7 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Mon, 16 Nov 2020 21:38:49 +0000
 Subject: [PATCH 15/18] i2c: i2c-core-acpi: Add i2c_acpi_dev_name()

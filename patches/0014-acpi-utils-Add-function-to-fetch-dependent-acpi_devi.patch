@@ -1,4 +1,4 @@
-From 9f5e86827e23c57ceae9212fcf81979e78b56687 Mon Sep 17 00:00:00 2001
+From 653d0a661205486e8c77dd303fcd0ca16342b1bc Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Thu, 26 Nov 2020 21:12:41 +0000
 Subject: [PATCH 14/18] acpi: utils: Add function to fetch dependent

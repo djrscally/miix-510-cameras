@@ -1,4 +1,4 @@
-From 4670a74925652566b349db6f340999340f5a7da4 Mon Sep 17 00:00:00 2001
+From d0f033bfbee79c2a8d33b6cddde58d5f29982687 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Wed, 21 Oct 2020 21:53:44 +0100
 Subject: [PATCH 13/18] ipu3-cio2: Add functionality allowing software_node
@@ -72,7 +72,7 @@ index 429d516452e4..933777e6ea8a 100644
 +ipu3-cio2-$(CONFIG_CIO2_BRIDGE) += cio2-bridge.o
 diff --git a/drivers/media/pci/intel/ipu3/cio2-bridge.c b/drivers/media/pci/intel/ipu3/cio2-bridge.c
 new file mode 100644
-index 000000000000..865c6f73d186
+index 000000000000..fd3f8ba07274
 --- /dev/null
 +++ b/drivers/media/pci/intel/ipu3/cio2-bridge.c
 @@ -0,0 +1,260 @@
@@ -138,11 +138,11 @@ index 000000000000..865c6f73d186
 +
 +static void cio2_bridge_init_property_names(struct cio2_sensor *sensor)
 +{
-+	strscpy(sensor->prop_names.clock_frequency, "clock-frequency", 16);
-+	strscpy(sensor->prop_names.rotation, "rotation", 16);
-+	strscpy(sensor->prop_names.bus_type, "bus-type", 16);
-+	strscpy(sensor->prop_names.data_lanes, "data-lanes", 16);
-+	strscpy(sensor->prop_names.remote_endpoint, "remote-endpoint", 16);
++	strcpy(sensor->prop_names.clock_frequency, "clock-frequency");
++	strcpy(sensor->prop_names.rotation, "rotation");
++	strcpy(sensor->prop_names.bus_type, "bus-type");
++	strcpy(sensor->prop_names.data_lanes, "data-lanes");
++	strcpy(sensor->prop_names.remote_endpoint, "remote-endpoint");
 +}
 +
 +static void cio2_bridge_create_fwnode_properties(struct cio2_sensor *sensor)
@@ -186,9 +186,9 @@ index 000000000000..865c6f73d186
 +
 +static void cio2_bridge_init_swnode_names(struct cio2_sensor *sensor)
 +{
-+	snprintf(sensor->node_names.remote_port, 10, "port%u", sensor->ssdb.link);
-+	strscpy(sensor->node_names.port, "port0", 10);
-+	strscpy(sensor->node_names.endpoint, "endpoint0", 10);
++	snprintf(sensor->node_names.remote_port, 6, "port%u", sensor->ssdb.link);
++	strcpy(sensor->node_names.port, "port0");
++	strcpy(sensor->node_names.endpoint, "endpoint0");
 +}
 +
 +static void cio2_bridge_create_connection_swnodes(struct cio2_bridge *bridge,
@@ -300,7 +300,7 @@ index 000000000000..865c6f73d186
 +		return -ENOMEM;
 +
 +	strscpy(bridge->cio2_node_name, CIO2_HID, sizeof(bridge->cio2_node_name));
-+	bridge->cio2_hid_node = (const struct software_node) { bridge->cio2_node_name };
++	bridge->cio2_hid_node = (const struct software_node){ bridge->cio2_node_name };
 +	bridge->cio2 = pci_dev_get(cio2);
 +
 +	ret = software_node_register(&bridge->cio2_hid_node);

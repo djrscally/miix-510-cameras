@@ -1,4 +1,4 @@
-From fa8c2de3fa71c80312b427867b7946e9f491f315 Mon Sep 17 00:00:00 2001
+From ef401f11040139b72190a93e26e2aede84100bda Mon Sep 17 00:00:00 2001
 From: Dan Scally <djrscally@gmail.com>
 Date: Mon, 16 Nov 2020 21:45:22 +0000
 Subject: [PATCH 16/18] i2c: i2c-core-base: Use the new i2c_acpi_dev_name() in

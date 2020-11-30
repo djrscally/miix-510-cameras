@@ -1,4 +1,4 @@
-From 3742cfc92cc98162118c9c67109c460c5815ad42 Mon Sep 17 00:00:00 2001
+From 1b979207d9cdd62628a1efd7eb478ed1bb2719f1 Mon Sep 17 00:00:00 2001
 From: Daniel Scally <djrscally@gmail.com>
 Date: Fri, 27 Nov 2020 10:18:10 +0000
 Subject: [PATCH 18/18] ipu3: Add driver for dummy INT3472 ACPI device
@@ -15,9 +15,9 @@ Signed-off-by: Daniel Scally <djrscally@gmail.com>
  MAINTAINERS                            |   7 +
  drivers/media/pci/intel/ipu3/Kconfig   |  14 +
  drivers/media/pci/intel/ipu3/Makefile  |   1 +
- drivers/media/pci/intel/ipu3/int3472.c | 374 +++++++++++++++++++++++++
+ drivers/media/pci/intel/ipu3/int3472.c | 381 +++++++++++++++++++++++++
  drivers/media/pci/intel/ipu3/int3472.h |  96 +++++++
- 5 files changed, 492 insertions(+)
+ 5 files changed, 499 insertions(+)
  create mode 100644 drivers/media/pci/intel/ipu3/int3472.c
  create mode 100644 drivers/media/pci/intel/ipu3/int3472.h
 
@@ -74,10 +74,10 @@ index 933777e6ea8a..2285947b2bd2 100644
  ipu3-cio2-$(CONFIG_CIO2_BRIDGE) += cio2-bridge.o
 diff --git a/drivers/media/pci/intel/ipu3/int3472.c b/drivers/media/pci/intel/ipu3/int3472.c
 new file mode 100644
-index 000000000000..73e39833aff2
+index 000000000000..9fab8dd2ac1b
 --- /dev/null
 +++ b/drivers/media/pci/intel/ipu3/int3472.c
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,381 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Author: Dan Scally <djrscally@gmail.com> */
 +#include <linux/acpi.h>
@@ -187,10 +187,10 @@ index 000000000000..73e39833aff2
 +	struct regulator_config cfg = { };
 +	int ret;
 +
-+        /*
-+         * We lookup supply names from machine specific tables, based on a
-+         * unique identifier in the sensor's _DSM
-+         */
++	/*
++	* We lookup supply names from machine specific tables, based on a
++	* unique identifier in the sensor's _DSM
++	*/
 +	regulator_map = int3472_get_sensor_supply_map(int3472);
 +	if (IS_ERR_OR_NULL(regulator_map)) {
 +		dev_err(&int3472->sensor->dev,
@@ -249,7 +249,7 @@ index 000000000000..73e39833aff2
 +err_free_regulator:
 +	kfree(regulator);
 +
-+	return PTR_ERR(regulator->rdev);
++	return ret;
 +}
 +
 +static int int3472_handle_gpio_resources(struct acpi_resource *ares,
@@ -281,16 +281,32 @@ index 000000000000..73e39833aff2
 +	switch (obj->integer.value & 0xff) { /* low byte holds type data */
 +	case 0x00: /* Purpose unclear, possibly a reset GPIO pin */
 +		ret = int3472_map_gpio_to_sensor(int3472, ares, "reset");
++		if (ret)
++			dev_warn(&int3472->adev->dev,
++				 "Failed to map reset pin to sensor\n");
++
 +		break;
 +	case 0x01: /* Power regulators (we think) */
 +	case 0x0c:
 +		ret = int3472_register_regulator(int3472, ares);
++		if (ret)
++			dev_warn(&int3472->adev->dev,
++				 "Failed to map regulator to sensor\n");
++
 +		break;
 +	case 0x0b: /* Power regulators, but to a device separate to sensor */
 +		ret = int3472_register_regulator(int3472, ares);
++		if (ret)
++			dev_warn(&int3472->adev->dev,
++				 "Failed to map regulator to sensor\n");
++
 +		break;
 +	case 0x0d: /* Indicator LEDs */
 +		ret = int3472_map_gpio_to_sensor(int3472, ares, "indicator-led");
++		if (ret)
++			dev_warn(&int3472->adev->dev,
++				 "Failed to map indicator led to sensor\n");
++
 +		break;
 +	default:
 +		/* if we've gotten here, we're not sure what they are yet */
@@ -301,26 +317,21 @@ index 000000000000..73e39833aff2
 +	}
 +
 +	int3472->n_gpios++;
-+
 +	ACPI_FREE(obj);
-+	return ret;
++	return abs(ret);
 +}
 +
-+static int int3472_parse_crs(struct int3472_device *int3472)
++static void int3472_parse_crs(struct int3472_device *int3472)
 +{
 +	struct list_head resource_list;
-+	int ret = 0;
 +
 +	INIT_LIST_HEAD(&resource_list);
 +
-+	ret = acpi_dev_get_resources(int3472->adev, &resource_list,
-+				     int3472_handle_gpio_resources, int3472);
++	acpi_dev_get_resources(int3472->adev, &resource_list,
++			       int3472_handle_gpio_resources, int3472);
 +
 +	acpi_dev_free_resource_list(&resource_list);
 +	gpiod_add_lookup_table(&int3472->gpios);
-+	// error handling for the above homeslice
-+
-+	return ret;
 +}
 +
 +static int int3472_add(struct acpi_device *adev)
@@ -396,14 +407,10 @@ index 000000000000..73e39833aff2
 +
 +	INIT_LIST_HEAD(&int3472->regulators);
 +
-+	ret = int3472_parse_crs(int3472);
-+	if (ret)
-+		goto out_put_sensor;
++	int3472_parse_crs(int3472);
 +
 +	goto out_free_buff;
 +
-+out_put_sensor:
-+	acpi_dev_put(int3472->sensor);
 +out_free_int3472:
 +	kfree(int3472);
 +out_free_buff:
@@ -454,7 +461,7 @@ index 000000000000..73e39833aff2
 +MODULE_DESCRIPTION("ACPI Driver for Discrete type INT3472 ACPI Devices");
 diff --git a/drivers/media/pci/intel/ipu3/int3472.h b/drivers/media/pci/intel/ipu3/int3472.h
 new file mode 100644
-index 000000000000..fb533d73c59a
+index 000000000000..6964726e8e1f
 --- /dev/null
 +++ b/drivers/media/pci/intel/ipu3/int3472.h
 @@ -0,0 +1,96 @@
@@ -534,22 +541,22 @@ index 000000000000..fb533d73c59a
 + * i2c-OVTI2680:00 device is avdd, the second is dovdd and so on.
 + */
 +
-+const struct regulator_consumer_supply miix_510_ov2680[] = {
++static struct regulator_consumer_supply miix_510_ov2680[] = {
 +	{ "i2c-OVTI2680:00", "avdd" },
 +	{ "i2c-OVTI2680:00", "dovdd" },
 +};
 +
-+const struct regulator_consumer_supply surface_go2_ov5693[] = {
++static struct regulator_consumer_supply surface_go2_ov5693[] = {
 +	{ "i2c-INT33BE:00", "avdd" },
 +	{ "i2c-INT33BE:00", "dovdd" },
 +};
 +
-+const struct regulator_consumer_supply surface_book_ov5693[] = {
++static struct regulator_consumer_supply surface_book_ov5693[] = {
 +	{ "i2c-INT33BE:00", "avdd" },
 +	{ "i2c-INT33BE:00", "dovdd" },
 +};
 +
-+const struct int3472_sensor_regulator_map int3472_sensor_regulator_maps[] = {
++static struct int3472_sensor_regulator_map int3472_sensor_regulator_maps[] = {
 +	{ "GNDF140809R", 2, miix_510_ov2680 },
 +	{ "YHCU", 2, surface_go2_ov5693 },
 +	{ "MSHW0070", 2, surface_book_ov5693 },
