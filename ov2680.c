@@ -312,12 +312,20 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 	if (ov2680->is_enabled)
 		dev_info(&ov2680->client->dev, "ov2680_power_on called when chip already is_enabled.\n");
 
+	ret = clk_prepare_enable(ov2680->clk);
+	if (ret) {
+		dev_err(&ov2680->client->dev, "Could not enable external clk\n");
+		return -EINVAL;
+	}
+
 	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 	if (ret < 0) {
 		dev_err(&ov2680->client->dev, "failed to enable regulators: %d\n", ret);
 		return ret;
 	}
 
+	gpiod_set_value(ov2680->reset, 0);
+	pr_info("should all be enabled\n");
 	/*
 	 * The ov2680 datasheet specifies a short pause between turning the chip on and the
 	 * first i2c message.
@@ -346,7 +354,7 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		return 0;
 	}
 
-	clk_disable_unprepare(ov2680->clk);
+	gpiod_set_value_cansleep(ov2680->reset, 1);
 	
 	ret = regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 	
@@ -354,6 +362,8 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		dev_err(&ov2680->client->dev, "Error disabling the regulators.\n");
 		return 1;
 	}
+
+	clk_disable_unprepare(ov2680->clk);
 
 	ov2680->is_enabled = 0;
 
@@ -1138,7 +1148,7 @@ static int ov2680_remove(struct i2c_client *client)
 
 	regulator_bulk_free(OV2680_NUM_SUPPLIES, ov2680->supplies);
 
-	gpiod_put(ov2680->reset);	
+	gpiod_put(ov2680->reset);
 
 	return 0;
 }
@@ -1180,6 +1190,17 @@ static int ov2680_probe(struct i2c_client *client)
 		dev_err(&client->dev, "Could not configure regulators\n");
 		goto remove_out;
 	}
+
+	ov2680->clk = devm_clk_get(&client->dev, "xvclk");
+	if (IS_ERR_OR_NULL(ov2680->clk)) {
+		dev_err(&client->dev, "Could not fetch clk\n");
+		goto remove_out;
+	}
+
+	unsigned long freq;
+
+	freq = clk_get_rate(ov2680->clk);
+	pr_info("Clock rate reported as %lu\n", freq);
 
 	ret = ov2680_power_on(ov2680);
 

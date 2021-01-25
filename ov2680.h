@@ -174,6 +174,7 @@ struct ov2680_device {
 	const struct ov2680_mode_info	*current_mode;
 
 	struct gpio_desc				*reset;
+	struct gpio_desc				*shutdown;
 
 	/* Miscellaneous gubbins */
 	struct mutex					lock;
