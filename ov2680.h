@@ -5,7 +5,7 @@
 #define I2C_MSG_LENGTH              0x02
 #define OV2680_ID                   0x2680
 #define OV2680_SC_CMMN_SUB_ID	    0x302A
-#define OV2680_NUM_SUPPLIES			7
+#define OV2680_NUM_SUPPLIES			2
 
 #define OV2680_REG_STREAM_CTRL		0x0100
 #define OV2680_REG_SOFT_RESET		0x0103
@@ -111,13 +111,8 @@ static const s64 link_freq_menu_items[] = {
 };
 
 static const char * const ov2680_supply_names[] = {
-	"CORE",
-	"ANA",
-	"VCM",
-	"VIO",
-	"VSIO",
-	"AUX1",
-	"AUX2",
+	"avdd",
+	"dovdd",
 };
 
 enum ov2680_tok_type {
@@ -168,21 +163,9 @@ struct ov2680_ctrls {
 	struct v4l2_ctrl *hblank;
 };
 
-/* GPIO Mapping for the camera */
-static struct gpiod_lookup_table ov2680_gpios = {
-	.dev_id = "i2c-OVTI2680:00",
-	.table = {
-		GPIO_LOOKUP_IDX("tps68470-gpio", 7, "s_enable", 0, GPIO_ACTIVE_HIGH),
-		GPIO_LOOKUP_IDX("tps68470-gpio", 8, "s_idle", 0, GPIO_ACTIVE_HIGH),
-		GPIO_LOOKUP_IDX("tps68470-gpio", 9, "s_resetn", 0, GPIO_ACTIVE_HIGH),
-		{ },
-	},
-};
-
-
 struct ov2680_device {
 	/* references */
-    struct i2c_client       		*client;			/* client for this physical device */
+    	struct i2c_client       		*client;			/* client for this physical device */
 	struct device					*pmic_dev;			/* physical device for the sensor's PMIC */
 	struct pci_dev					*cio2_dev;
 	struct v4l2_subdev				sd;
@@ -190,15 +173,8 @@ struct ov2680_device {
 	u32								clk_freq;
 	const struct ov2680_mode_info	*current_mode;
 
-	/* GPIO pins to turn on the PMIC */
-    struct gpio_desc        		*gpio0;
-    struct gpio_desc        		*gpio1;
-
-	/* GPIO pins to turn on the sensor */
-	struct gpiod_lookup_table		*gpios;
-	struct gpio_desc				*s_enable;
-	struct gpio_desc				*s_idle;
-	struct gpio_desc				*s_resetn;
+	struct gpio_desc				*reset;
+	struct gpio_desc				*shutdown;
 
 	/* Miscellaneous gubbins */
 	struct mutex					lock;

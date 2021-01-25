@@ -273,31 +273,28 @@ static int ov2680_configure_gpios(struct ov2680_device *ov2680)
 {
 	int ret;
 
-	ret = ov2680_get_pmic_dev(ov2680);
-
-	if (ret) {
-		dev_err(&ov2680->client->dev, "Error fetching PMIC device\n");
-		return ret;
-	}
-	ov2680->gpio0 = gpiod_get_index(ov2680->pmic_dev, NULL, 1, GPIOD_ASIS);
-
-	if (!ov2680->gpio0) {
-		dev_err(&ov2680->client->dev, "Error fetching GPIO0. Device cannot be powered on\n");
-		return -EINVAL;
-	}
-
-	ov2680->gpio1 = gpiod_get_index(ov2680->pmic_dev, NULL, 2, GPIOD_ASIS);
-
-	if (!ov2680->gpio1) {
-		dev_err(&ov2680->client->dev, "Error fetching GPIO1. Device cannot be powered on\n");
+	ov2680->reset = gpiod_get_index(&ov2680->client->dev, "reset", 0, GPIOD_OUT_HIGH);
+	if (IS_ERR(ov2680->reset)) {
+		pr_err("Couldn't fetch reset\n");
 		return -EINVAL;
 	}
 
 	/* pull both pins low initially */
-	gpiod_set_value_cansleep(ov2680->gpio0, 0);
-	gpiod_set_value_cansleep(ov2680->gpio1, 0);
+	// gpiod_set_value_cansleep(ov2680->reset, 0);
 
 	return 0;
+}
+
+static int ov2680_get_regulators(struct ov2680_device *sensor)
+{
+	int i;
+
+	for (i = 0; i < OV2680_NUM_SUPPLIES; i++)
+		sensor->supplies[i].supply = ov2680_supply_names[i];
+
+	return devm_regulator_bulk_get(&sensor->client->dev,
+				       OV2680_NUM_SUPPLIES,
+				       sensor->supplies);
 }
 
 static int ov2680_power_on(struct ov2680_device *ov2680)
@@ -315,9 +312,20 @@ static int ov2680_power_on(struct ov2680_device *ov2680)
 	if (ov2680->is_enabled)
 		dev_info(&ov2680->client->dev, "ov2680_power_on called when chip already is_enabled.\n");
 
-    gpiod_set_value_cansleep(ov2680->gpio0, 1);
-    gpiod_set_value_cansleep(ov2680->gpio1, 1);
+	ret = clk_prepare_enable(ov2680->clk);
+	if (ret) {
+		dev_err(&ov2680->client->dev, "Could not enable external clk\n");
+		return -EINVAL;
+	}
 
+	ret = regulator_bulk_enable(OV2680_NUM_SUPPLIES, ov2680->supplies);
+	if (ret < 0) {
+		dev_err(&ov2680->client->dev, "failed to enable regulators: %d\n", ret);
+		return ret;
+	}
+
+	gpiod_set_value(ov2680->reset, 0);
+	pr_info("should all be enabled\n");
 	/*
 	 * The ov2680 datasheet specifies a short pause between turning the chip on and the
 	 * first i2c message.
@@ -346,13 +354,7 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		return 0;
 	}
 
-	clk_disable_unprepare(ov2680->clk);
-
-	gpiod_set_value_cansleep(ov2680->s_resetn, 0);
-	usleep_range(10000, 11000);
-	
-	gpiod_set_value_cansleep(ov2680->s_enable, 0);
-	gpiod_set_value_cansleep(ov2680->s_idle, 0);
+	gpiod_set_value_cansleep(ov2680->reset, 1);
 	
 	ret = regulator_bulk_disable(OV2680_NUM_SUPPLIES, ov2680->supplies);
 	
@@ -360,6 +362,8 @@ static int ov2680_power_off(struct ov2680_device *ov2680)
 		dev_err(&ov2680->client->dev, "Error disabling the regulators.\n");
 		return 1;
 	}
+
+	clk_disable_unprepare(ov2680->clk);
 
 	ov2680->is_enabled = 0;
 
@@ -1140,6 +1144,12 @@ static int ov2680_remove(struct i2c_client *client)
 
 	v4l2_device_unregister_subdev(sd);
 
+	ov2680_power_off(ov2680);
+
+	regulator_bulk_free(OV2680_NUM_SUPPLIES, ov2680->supplies);
+
+	gpiod_put(ov2680->reset);
+
 	return 0;
 }
 
@@ -1173,7 +1183,24 @@ static int ov2680_probe(struct i2c_client *client)
 	if (ret) {
 		dev_err(&client->dev, "Could not configure the GPIOs.\n");
 		goto remove_out;
-	} 
+	}
+
+	ret = ov2680_get_regulators(ov2680);
+	if (ret) {
+		dev_err(&client->dev, "Could not configure regulators\n");
+		goto remove_out;
+	}
+
+	ov2680->clk = devm_clk_get(&client->dev, "xvclk");
+	if (IS_ERR_OR_NULL(ov2680->clk)) {
+		dev_err(&client->dev, "Could not fetch clk\n");
+		goto remove_out;
+	}
+
+	unsigned long freq;
+
+	freq = clk_get_rate(ov2680->clk);
+	pr_info("Clock rate reported as %lu\n", freq);
 
 	ret = ov2680_power_on(ov2680);
 
